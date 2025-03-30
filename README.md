@@ -15,6 +15,11 @@ substitutions:
   hide_magnetic_field_strength_sensors: 'true'
   hide_half_rotations_total_sensor: 'true'
 
+  # initial state.
+  volume_initial_total: '0'
+  half_rotation_initial_value: '0'
+  volume_per_half_rotation_initial_value: '0.0420311'
+
 packages:
   meter:
     url: https://github.com/tronikos/esphome-magnetometer-water-gas-meter
@@ -261,16 +266,13 @@ If you have the Flume water sensor you can use its lowest reported value. You ca
 
 Alternatively:
 
-1. Temporarily set `hide_half_rotations_total_sensor: 'false'` to show the "Half rotations total" sensor in HA.
-2. Write it down and also write down the reading on your water/gas meter.
-3. After a few hours or even days of regular water/gas usage, write down both of them again.
-4. Set this to the result of: diff of readings in volume_unit divided by diff of half rotations.
-5. Set `hide_half_rotations_total_sensor: 'true'`.
+Assuming when you Connect the meter, you setup the initial volume matched the meter.
 
-For water meters this defaults to `0.01008156 gal` which is for my 3/4" Badge Meter Model 35.
-For gas meters this defaults to `0.125 ft³` which seems to be the most common in US.
-If you have modified the `volume_unit` you have to manually convert this value.
-E.g. if for gas you used `volume_unit: 'CCF'` then you need to set the volume per half rotation to: `0.00125 CCF` (just search on Google `0.125 ft³ to CCF`).
+1. Goes to HomeAssistant->Developer Tools->Actions
+2. Find out the Actions to set current totals
+3. Setup the value matches your **current** readings from the meter.
+
+This is recalculate the `volume_per_half_rotation` based on the difference of `initial_volume` and `current_volume`.
 
 ### Temperature
 
