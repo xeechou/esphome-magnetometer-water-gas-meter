@@ -10,7 +10,11 @@ substitutions:
 
   # For water one of: CCF, ft³, gal, L, m³
   # For gas one of: CCF, ft³, m³
-  volume_unit: 'gal'
+  volume_unit: 'L'
+  # sometimes the native volume unit you want to track does not matches the meter. I introduces a new water
+  volume_unit_display: 'm³'
+  # ratio to get volume_unit_display to volume_unit
+  volume_unit_multiplier: '1000.0'
 
   i2c_scl: GPIO5  # D1
   i2c_sda: GPIO4  # D2
@@ -22,7 +26,9 @@ substitutions:
   qmc5883l_update_interval: '5ms'
   qmc5883l_oversampling: '64x'
 
-  volume_per_half_rotation_initial_value: '0.01008156'
+  volume_initial_total: '3002508.61' #note that this is in volume_unit
+  half_rotation_initial_value: '1415'
+  volume_per_half_rotation_initial_value: '0.0420311'
   flow_update_interval_seconds: '10'
 
   hide_magnetic_field_strength_sensors: 'true'
@@ -33,9 +39,9 @@ esphome:
   # Default loop interval is 16ms. Setting it to 0 to make updates faster.
   # Without setting this, the actual update interval of qmc5883l is: 6ms on ESP32, 10ms on ESP8266.
   # With this, it's 5ms on ESP32, 8ms on ESP8266.
-  on_boot:
-    then:
-      - lambda: App.set_loop_interval(0);
+  # on_boot:
+  #   then:
+  #     - lambda: App.set_loop_interval(0);
 
 logger:
   level: INFO
@@ -43,22 +49,20 @@ logger:
     qmc5883l: INFO
 
 api:
-  services:
-    # Based on https://esphome.io/components/sensor/pulse_meter.html#re-setting-the-total-pulse-count
-    # Useful if you would like the total sensor to match what you see on your meter you are trying to match.
-    - service: ${prefix_id}set_total
+  actions:
+    - action: set_current_total
       variables:
-        new_total: float
+        curr_total: float
       then:
-        - globals.set:
-            id: ${prefix_id}half_rotations_total
-            value: !lambda 'return new_total / id(${prefix_id}volume_per_half_rotation).state;'
+        - number.set:
+            id: ${prefix_id}volume_per_half_rotation
+            value: !lambda 'return ( (curr_total * ${volume_unit_multiplier}) - ${volume_initial_total} ) / (float)id(${prefix_id}half_rotations_total);'
 
 globals:
   - id: ${prefix_id}half_rotations_total
     type: long
     restore_value: yes
-    initial_value: '0'
+    initial_value: ${half_rotation_initial_value}
   - id: ${prefix_id}half_rotations_flow
     type: long
     restore_value: no
@@ -100,10 +104,14 @@ number:
     max_value: 9999999
     step: 0.000000001
     initial_value: ${volume_per_half_rotation_initial_value}
+    internal: true
     update_interval: never
     restore_value: true
     optimistic: true
     unit_of_measurement: ${volume_unit}
+    on_value:
+      then:
+        - component.update: ${prefix_id}volume_per_half_rotation_sensor
 
   - platform: template
     id: ${prefix_id}temperature_offset
@@ -378,3 +386,30 @@ sensor:
       - or:
           - throttle: 60s
           - delta: 0
+
+## my own sensors
+  - platform: template
+    id: water_sensor_total_current
+    name: precised total water usage
+    lambda: |-
+      float total_in_liter = id(${prefix_id}half_rotations_total) * id(${prefix_id}volume_per_half_rotation).state;
+      return (${volume_initial_total} + total_in_liter) / ${volume_unit_multiplier};
+    update_interval: 10s
+    accuracy_decimals: 4
+    device_class: ${device_class}
+    icon: ${device_icon}
+    state_class: total_increasing
+    unit_of_measurement: '${volume_unit_display}'
+    filters:
+      - or:
+          - throttle: 60s
+          - delta: 0
+
+# displaying the accurate volume per half rotation.
+  - platform: template
+    id: ${prefix_id}volume_per_half_rotation_sensor
+    name: ${prefix_name} Precised Volume per half rotation
+    lambda: !lambda 'return id(${prefix_id}volume_per_half_rotation).state;'
+    update_interval: 60s
+    accuracy_decimals: 7
+    unit_of_measurement: ${volume_unit}
