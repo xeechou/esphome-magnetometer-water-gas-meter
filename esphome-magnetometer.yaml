@@ -429,7 +429,7 @@ sensor:
     name: precised total water usage
     lambda: |-
       float total_in_liter = id(${prefix_id}half_rotations_total) * id(${prefix_id}volume_per_half_rotation).state;
-      return (id(${prefix_id}volume_init + total_in_liter) / ${volume_unit_multiplier};
+      return (id(${prefix_id}volume_init) + total_in_liter) / ${volume_unit_multiplier};
     update_interval: 10s
     accuracy_decimals: 4
     device_class: ${device_class}
