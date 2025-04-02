@@ -50,15 +50,40 @@ logger:
 
 api:
   actions:
-    - action: set_current_total
+    - action: set_either_total   #set curr_total or init_total, cannot be both
       variables:
         curr_total: float
+        init_total: float
       then:
-        - number.set:
+        - number.set:   #set curr_total  or init_total
             id: ${prefix_id}volume_per_half_rotation
-            value: !lambda 'return ( (curr_total * ${volume_unit_multiplier}) - ${volume_initial_total} ) / (float)id(${prefix_id}half_rotations_total);'
-
+            value: !lambda |-
+              if (curr_total > 0.0f) {
+                  return ( (curr_total * ${volume_unit_multiplier}) - id(${prefix_id}volume_init) ) / (float)id(${prefix_id}half_rotations_total);
+              } else {
+                  return id(${prefix_id}volume_per_half_rotation).state;
+              }
+        - globals.set:
+            id: ${prefix_id}half_rotations_total
+            value: !lambda |-
+              if (init_total > 0.0f) {
+                 return (long int)0;
+              } else {
+                return (long int) id(${prefix_id}half_rotations_total);
+              }
+        - globals.set:
+            id: ${prefix_id}volume_init
+            value: !lambda |-
+              if (init_total > 0.0f) {
+                 return init_total * ${volume_unit_multiplier};
+              } else {
+                return id(${prefix_id}volume_init);
+              }
 globals:
+  - id: ${prefix_id}volume_init
+    type: float
+    restore_value: yes
+    initial_value: ${volume_initial_total}
   - id: ${prefix_id}half_rotations_total
     type: long
     restore_value: yes
@@ -389,11 +414,22 @@ sensor:
 
 ## my own sensors
   - platform: template
+    id: water_sensor_total_init
+    name: initial water usage setup
+    lambda: 'return id(${prefix_id}volume_init) / ${volume_unit_multiplier};'
+    icon: ${device_icon}
+    device_class: ${device_class}
+    state_class: total
+    accuracy_decimals: 4
+    update_interval: 10s
+    unit_of_measurement: '${volume_unit_display}'
+
+  - platform: template
     id: water_sensor_total_current
     name: precised total water usage
     lambda: |-
       float total_in_liter = id(${prefix_id}half_rotations_total) * id(${prefix_id}volume_per_half_rotation).state;
-      return (${volume_initial_total} + total_in_liter) / ${volume_unit_multiplier};
+      return (id(${prefix_id}volume_init + total_in_liter) / ${volume_unit_multiplier};
     update_interval: 10s
     accuracy_decimals: 4
     device_class: ${device_class}
