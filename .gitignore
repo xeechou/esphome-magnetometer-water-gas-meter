@@ -135,3 +135,5 @@ sdkconfig.*
 
 build.yaml
 *.ota.bin
+
+.eca/config.yaml

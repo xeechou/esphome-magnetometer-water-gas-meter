@@ -1,3 +1,29 @@
+### NOTE on external components #####################################################
+# when using external_components with local path, esphome resolves paths
+# relative to main config
+#
+#####################################################################################
+
+## For remote build (home assistant environment)
+# external_components:
+#   - source:
+#       type: git
+#       url: https://github.com/xeechou/esphome-magnetometer-water-gas-meter
+#       ref: quadrature-meter
+#       path: components
+#     components: [sensor_update]
+#
+# sensor_update:
+
+# For local build (esphome compile)
+# external_components:
+#   - source:
+#       type: local
+#       path: components
+#     components: [sensor_update]
+#
+# sensor_update:
+
 esphome:
   on_boot:
     priority: 600  # after HARDWARE, before DATA

@@ -1,12 +1,5 @@
 #include "sensor_update.h"
-
-// ESPHome headers — needed for publish_state(), millis(), logging macros, str_sprintf
-#include "esphome/core/hal.h"
-#include "esphome/core/log.h"
-#include "esphome/core/helpers.h"
-#include "esphome/components/sensor/sensor.h"
-#include "esphome/components/binary_sensor/binary_sensor.h"
-#include "esphome/components/text_sensor/text_sensor.h"
+#include "sensor_update_api.h"
 
 static const char *const TAG = "sensor_update";
 
@@ -62,16 +55,19 @@ void sensor_update(int sensor, float value) {
       if (hysteresis > 20) {
         hysteresis = 20;
         hyst_sampling = 0;
-        s_ent.sensor_failure->publish_state(true);
-        ESP_LOGW(TAG, "hysteresis overly high (>%g); is water flowing?",
+        PUBLISH_STATE(s_ent.sensor_failure, true);
+        LOG_W(TAG, "hysteresis overly high (>%g); is water flowing?",
                  hysteresis);
       }
     }
-    s_ent.hyst_sensor->publish_state(
-        esphome::str_sprintf("hysteresis set to %g", hysteresis));
+    PUBLISH_STATE(s_ent.hyst_sensor,
+                  STR_SPRINTF("hysteresis set to %g", hysteresis).c_str());
+    LOG_I(TAG, STR_SPRINTF("hysteresis set to %g", hysteresis).c_str());
     return;
-  } else if (smax - smin < 2 * hysteresis) {
-    return;
+  }
+  else if (smax - smin < 2 * hysteresis)
+  {
+      return;
   }
 
   // --- quadrature decoding ------------------------------------------------
@@ -93,7 +89,7 @@ void sensor_update(int sensor, float value) {
     if (calib_rots) {
       calib_rots--;
       if (!calib_rots) {
-        ESP_LOGI(TAG, "min/max detected as %g/%g, %g/%g",
+        LOG_I(TAG, "min/max detected as %g/%g, %g/%g",
                  s_ent.qcal[0], s_ent.qcal[1],
                  s_ent.qcal[2], s_ent.qcal[3]);
       }
@@ -107,11 +103,11 @@ void sensor_update(int sensor, float value) {
 
   // --- burstmon (pipe-burst detection) ------------------------------------
   bool armed = (*s_ent.disarm_s) <= 0;
-  int sample_time = esphome::millis();
+  int sample_time = GET_MILLIS();
 
   if (mod
       && sample_time - last_sample[sensor] < 2 * (int)s_cfg.sensor_update_interval_ms
-      && s_ent.sensor_sample_rate->get_state() > s_sample_rate_thresh
+      && GET_STATE(s_ent.sensor_sample_rate) > s_sample_rate_thresh
       && armed) {
     run[sensor]++;
     run[2]++;
@@ -121,14 +117,14 @@ void sensor_update(int sensor, float value) {
         s_cfg.burstmon_same_thresh && run[sensor] > s_cfg.burstmon_same_thresh;
 
     if (any_burst || same_burst) {
-      s_ent.leak_warning->publish_state(true);
-      s_ent.leak_detected->publish_state(true);
+      PUBLISH_STATE(s_ent.leak_warning, true);
+      PUBLISH_STATE(s_ent.leak_detected, true);
       if (any_burst && same_burst) {
-        s_ent.leak_trigger->publish_state("burstmon: same + any");
+        PUBLISH_STATE(s_ent.leak_trigger, "burstmon: same + any");
       } else if (any_burst) {
-        s_ent.leak_trigger->publish_state("burstmon: any");
+        PUBLISH_STATE(s_ent.leak_trigger, "burstmon: any");
       } else {
-        s_ent.leak_trigger->publish_state("burstmon: same");
+        PUBLISH_STATE(s_ent.leak_trigger, "burstmon: same");
       }
     }
   } else {

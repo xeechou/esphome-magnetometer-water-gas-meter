@@ -1,8 +1,11 @@
 #pragma once
 
 #include "esphome/core/component.h"
+#include "sensor_update.h"
+#include "sensor_update_api.h"
 
-namespace sensor_update_comp {
+namespace sensor_update_comp
+{
 
 /// Trivial component whose sole purpose is to make ESPHome compile
 /// every .cpp file in this directory.  All real logic lives in
@@ -16,4 +19,4 @@ class SensorUpdateComponent : public esphome::Component {
   }
 };
 
-}  // namespace sensor_update_comp
+} // namespace sensor_update_comp
