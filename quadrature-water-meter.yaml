@@ -1,7 +1,12 @@
+external_components:
+  - source:
+      type: local
+      path: components
+    components: [sensor_update]
+
+sensor_update:
+
 esphome:
-  includes:
-    - src/sensor_update.h
-    - src/sensor_update.cpp
   on_boot:
     priority: 600  # after HARDWARE, before DATA
     then:

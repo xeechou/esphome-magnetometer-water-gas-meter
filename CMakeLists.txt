@@ -66,8 +66,8 @@ target_include_directories(esphome_headers INTERFACE
 # Our source files — the actual code that ESPHome will compile
 # ---------------------------------------------------------------------------
 add_library(sensor_update STATIC
-  src/sensor_update.h
-  src/sensor_update.cpp
+  components/sensor_update/sensor_update.h
+  components/sensor_update/sensor_update.cpp
 )
 target_link_libraries(sensor_update PUBLIC esphome_headers)
 
