@@ -1,0 +1,249 @@
+esphome:
+  includes:
+    - src/sensor_update.h
+    - src/sensor_update.cpp
+  on_boot:
+    priority: 600  # after HARDWARE, before DATA
+    then:
+      - lambda: |-
+          // Wire up config (from YAML substitutions) and entity pointers once
+          SensorUpdateConfig cfg {
+            .sensor_update_interval_ms = ${sensor_update_interval_ms},
+            .sample_rate_safety_factor = ${sample_rate_safety_factor},
+            .reverse_flow             = ${reverse_flow},
+            .burstmon_any_thresh      = ${burstmon_any_thresh},
+            .burstmon_same_thresh     = ${burstmon_same_thresh},
+          };
+          SensorUpdateEntities ent {
+            .errors                  = &id(errors),
+            .samples                 = id(samples),
+            .quarter_rotations_total = &id(quarter_rotations_total),
+            .quarter_rotations_flow  = &id(quarter_rotations_flow),
+            .qcal                    = id(qcal),
+            .disarm_s                = &id(disarm_s),
+            .sensor_sample_rate      = id(sensor_sample_rate),
+            .leak_detected           = id(leak_detected),
+            .leak_warning            = id(leak_warning),
+            .sensor_failure          = id(sensor_failure),
+            .leak_trigger            = id(leak_trigger),
+            .hyst_sensor             = id(hyst_sensor),
+          };
+          sensor_update_init(cfg, ent);
+
+#####################################################################################
+## general config
+#####################################################################################
+
+# Enable logging
+logger:
+  level: INFO
+  logs:
+    sensor: INFO
+    sensors: INFO
+
+#####################################################################################
+## water meter config
+#####################################################################################
+substitutions:
+  # 1st i2c bus
+  i2c_a_scl: GPIO21
+  i2c_a_sda: GPIO17
+  i2c_a_drdy: GPIO15
+  # 2nd i2c bus
+  i2c_b_scl: GPIO16
+  i2c_b_sda: GPIO18
+  i2c_b_drdy: GPIO3
+  # frequencies
+  i2c_bus_freq: '50kHz'
+  sensor_update_interval_ms: '5'
+  sensor_oversampling: '64x'
+
+  gpio_led: GPIO2
+
+  reverse_flow: 'false'  # Flip this if your sensor order results in negative flow in normal
+  sample_rate_safety_factor: '0.95'
+
+  # burstmon: performs pipe burst detection by monitoring sensors for abnormal behavior
+  # Burst pipes pose an issue for detection, as the flow rates quickly get unreasonably large for our sample rates
+  # Once the flow gets large enough, aliasing occurs and it may look like a smaller (or negative!) flow rate.
+  # To defend against this, imagine that the steady-state of a burst pipe can alias and look like any flow,
+  #   from -flow_max to +flow_max, uniformly-distributed.
+  # An aggressive negative flowmon will catch 50% of these flows.
+  # If a flowmon for the maximum expected flow is set at a quarter of the flow_max, that will catch 37.5% of the flows.
+  # The remaining ~12.5% of the flows pose a challenge if they reach steady-state, since they look like normal flows.
+  # Fortunately, pipe burst events do not instantly reach steady-state, so burstmon monitors for abnormal sensor
+  # behavior that would indicate a very high flow rate.  Burstmon reacts on the timeframe of the sampling rate, rather
+  # than the flow interval, so it can catch these sudden transients well before the burst hits steady-state.
+  # As a side note: if the sensors are noisy and hysteresis gets too large, some exceptional flows hovering around a
+  # multiple of flow_max will be hard to detect.  The dead zone can be calculated by 2*hysteresis/(max-min), so
+  # approximately a tenth of flows that themselves are at some multiple of flow_max -- very small odds.
+  # burstmon is only activated when the sample rate is above sample_rate_safety_factor of the target sample rate.
+  burstmon_any_thresh: '3'  # maximum allowed sensor inversions in a row (0 disables)
+                            # setting to 1 may also trigger at flows beyond flow_max/4
+                            # setting at or beyond 2*burstmon_same_thresh effectively disables it
+  burstmon_same_thresh: '2' # maximum allowed same-sensor inversions in a row (0 disables)
+                            # setting to 1 may also trigger at flows beyond flow_max/2
+
+#####################################################################################
+## i2c config
+#####################################################################################
+
+i2c:
+  - id: i2c_a
+    scl: ${i2c_a_scl}
+    sda: ${i2c_a_sda}
+    frequency: ${i2c_bus_freq}
+    scan: False
+
+  - id: i2c_b
+    scl: ${i2c_b_scl}
+    sda: ${i2c_b_sda}
+    frequency: ${i2c_bus_freq}
+    scan: False
+
+#####################################################################################
+## sensors
+#####################################################################################
+
+sensor:
+  - platform: qmc5883l
+    id : qmc_a
+    i2c_id: i2c_a
+    address: 0x0D
+    update_interval: ${sensor_update_interval_ms}ms
+    oversampling: ${sensor_oversampling}
+    field_strength_z: 
+      id: z_a
+      entity_category: diagnostic
+      on_raw_value:
+        then:
+          - lambda: id(sensor_update_script).execute(0, x);
+      filters:
+        - delta: 5
+        - throttle: 500ms
+
+  - platform: qmc5883l
+    id : qmc_b
+    i2c_id: i2c_b
+    address: 0x0D
+    update_interval: ${sensor_update_interval_ms}ms
+    oversampling: ${sensor_oversampling}
+    field_strength_z: 
+      id: z_b
+      entity_category: diagnostic
+      on_raw_value:
+        then:
+          - lambda: id(sensor_update_script).execute(1, x);
+      filters:
+        - delta: 5
+        - throttle: 500ms
+
+  - platform: template
+    id: sensor_sample_rate
+    name: Sample rate
+    entity_category: diagnostic
+    accuracy_decimals: 0
+    device_class: frequency
+    state_class: measurement
+    unit_of_measurement: Hz
+    filters:
+      - or:
+        - throttle: 60s
+        - delta: 4
+
+binary_sensor:
+  - platform: template
+    id: leak_detected
+    name: Leak detected
+    device_class: problem
+    # on_press:                           #led output
+    #   then:
+    #     - output.turn_on: leak_out
+    # on_release:
+    #   then:
+    #     - output.turn_off: leak_out
+
+  - platform: template
+    id: leak_warning
+    name: Leak imminent
+    device_class: problem
+
+  - platform: template
+    id: sensor_failure
+    name: Sensor failure
+    device_class: problem
+    entity_category: diagnostic
+
+button:
+  - platform: template
+    id: reset_calibration
+    name: Reset Calibration
+    entity_category: config
+    on_press:
+      then:
+        - lambda: |-
+            // Reset qcal values to trigger recalibration
+            for (int i = 0; i < 5; i++) {
+              id(qcal)[i] = 0;
+            }
+            ESP_LOGI("button", "Calibration reset - qcal cleared");
+
+text_sensor:
+  - platform: template
+    id: leak_trigger
+    name: Leak trigger
+    entity_category: diagnostic
+
+  - platform: template             # debugging purpose, delete later
+    id: hyst_sensor
+    name: hysteresis
+    entity_category: diagnostic    
+
+#####################################################################################
+## globals
+#####################################################################################
+
+globals:
+  - id: errors
+    type: long
+    restore_value: no
+    initial_value: '0'
+  - id: samples
+    type: int[2]
+    restore_value: no
+    initial_value: '{0,0}'
+  - id: quarter_rotations_total
+    type: long
+    restore_value: yes
+    initial_value: '0'
+  - id: quarter_rotations_flow
+    type: long
+    restore_value: no
+    initial_value: '0'
+  - id: qcal
+    type: float[5]
+    restore_value: yes
+    initial_value: '{0,0,0,0,0}'
+  - id: led_level
+    type: float
+    restore_value: no
+    initial_value: '1'
+  - id: disarm_s
+    type: float
+    restore_value: no
+    initial_value: '0'
+
+#####################################################################################
+## sensor_update script
+#####################################################################################
+
+# for quadrature encoder, see:
+# https://cdn.sparkfun.com/datasheets/Robotics/How%20to%20use%20a%20quadrature%20encoder.pdf
+script:
+  - id: sensor_update_script
+    parameters:
+      sensor: int
+      value: float
+    then:
+      - lambda: |-
+          sensor_update(sensor, value);

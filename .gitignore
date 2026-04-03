@@ -90,7 +90,7 @@ venv-*/
 .vscode/
 !.vscode/tasks.json
 CMakeListsPrivate.txt
-CMakeLists.txt
+!CMakeLists.txt
 
 # User-specific stuff:
 .idea/**/workspace.xml
@@ -132,3 +132,6 @@ sdkconfig.*
 !sdkconfig.defaults
 
 .tests/
+
+build.yaml
+*.ota.bin
