@@ -1,0 +1,105 @@
+---
+Language: Cpp
+# BasedOnStyle: Mozilla
+
+# indent
+UseTab: Never
+IndentWidth: 4
+# has to the same as indent width
+AccessModifierOffset: -4
+IndentCaseLabels: false
+IndentPPDirectives: AfterHash
+AlwaysBreakTemplateDeclarations: true
+LambdaBodyIndentation: OuterScope
+BreakAfterReturnType: TopLevelDefinitions
+
+IndentWrappedFunctionNames: false
+# BraceWrapping:
+#   IndentBraces : true
+#   AfterStruct: false
+
+
+#name space
+CompactNamespaces: true
+FixNamespaceComments: true
+NamespaceIndentation: None
+InsertTrailingCommas: Wrapped
+
+#line space
+AllowShortBlocksOnASingleLine: true
+AllowShortCompoundRequirementOnASingleLine: true
+AllowShortEnumsOnASingleLine: true
+AllowShortIfStatementsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: true
+AllowAllParametersOfDeclarationOnNextLine: true
+AllowShortLoopsOnASingleLine: false
+AllowAllArgumentsOnNextLine: false
+AllowShortLambdasOnASingleLine: All
+AllowShortCaseExpressionOnASingleLine: true
+ColumnLimit: 89
+
+PointerAlignment: Left
+AlignArrayOfStructures: None
+AlignConsecutiveDeclarations: true
+AlignAfterOpenBracket: Align
+AlignConsecutiveAssignments:
+  Enabled: true
+  AcrossComments: false
+  AcrossEmptyLines: false
+  AlignCompound: true
+  PadOperators: false
+AlignTrailingComments: true
+AlignEscapedNewlines: Left
+
+BinPackArguments: false
+BinPackParameters: false
+PackConstructorInitializers: Never
+
+# break before braces, the style mimics the Allman except a few tweaks
+BreakBeforeBraces: Custom
+#BracedInitializerIndentWidth: 2
+BraceWrapping:
+  AfterClass: true
+  AfterStruct: true
+  AfterCaseLabel: true
+  AfterControlStatement: Always
+  AfterEnum: false
+  AfterFunction: true
+  AfterNamespace: true
+  AfterObjCDeclaration: true
+  AfterUnion: true
+  AfterExternBlock: true
+  BeforeElse: true
+  BeforeLambdaBody: false
+  SplitEmptyFunction: false
+  SplitEmptyRecord: false
+  SplitEmptyNamespace: true
+
+BreakBeforeConceptDeclarations: Always
+BreakBeforeInlineASMColon: OnlyMultiline
+BreakBeforeTernaryOperators: false
+BreakConstructorInitializers: AfterColon
+BreakInheritanceList: AfterColon
+BreakStringLiterals: true
+BreakTemplateDeclarations: Yes
+BreakFunctionDefinitionParameters: false
+#BreakBeforeBinaryOperators: All
+#Cpp11BracedListStyle: false
+#include
+IncludeBlocks: Regroup
+SortIncludes: false
+
+SortUsingDeclarations: true
+#spaces
+SpaceAfterCStyleCast: false
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeParens: ControlStatements
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+SpaceInEmptyParentheses: false
+SpacesInAngles: false
+SpacesInCStyleCastParentheses: false
+SpacesInContainerLiterals: false
+
+
+...

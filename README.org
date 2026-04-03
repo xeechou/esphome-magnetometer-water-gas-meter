@@ -1,0 +1,136 @@
+:PROPERTIES:
+:GPTEL_MODEL: claude-opus-4.5
+:GPTEL_BACKEND: Copilot
+:GPTEL_SYSTEM: You are a large language model living in Emacs and a helpful assistant. Respond concisely.
+:GPTEL_TOOLS: read_url
+:GPTEL_BOUNDS: ((response (3185 4289)))
+:END:
+#+title: A Quadrature encoder esphome implementation of magnetometer based smart water meter
+
+* Main motivation: Actual C++ code
+I really do not like writing c++ source code in YAML. So I paired programming with Claude to sort out an solution. There are mostly 2 options here:
+
+** [[https://esphome.io/components/esphome/#includes][ESPHome/Core/includes]]
+This is where you have ~includes~ in ~quadrature-meter.yaml~.
+
+#+begin_src yaml
+esphome:
+  includes:
+    - sensor_update.h
+    - sensor_update.cpp
+#+end_src
+
+This option platformio copies your c++ header files into ~.esphome/build/app/src~ and compile along with ~main.cpp~. The resulting folder structure is
+
+#+begin_src 
+ .                     drwxr-xr-x 3
+ ..                    drwxr-xr-x 6
+ CMakeLists.txt        -rw-r--r-- 1
+ esphome               drwxr-xr-x 4
+ esphome.h             -rw-r--r-- 1
+ idf_component.yml     -rw-r--r-- 1
+ main.cpp              -rw-r--r-- 1
+ sensor_update.cpp     -rw-r--r-- 1
+ sensor_update.h       -rw-r--r-- 1
+#+end_src
+
+the ~main.cpp~ is orchestrated from the ~esphome compile /path/to/your-config.yaml~.  where you can see a ~#include "sensor_update.h"~ in ~main.cpp~.
+
+*** However there is captchas here:
+
+I found this approach does not work on home assistant esphome  builder.
+
+**** 1. The final ~config.yaml~ is fused with packages
+Assuming you use packages in ~config.yaml~.
+
+#+begin_src yaml
+packages:
+  - !include quadrature-water-meter.yaml  
+#+end_src
+
+esphome fuses ~quadrature-water-meter.yaml~ (and possibly ~secrets.yaml~) into your ~config.yaml~ before generates ~main.cpp~ (using platformio).
+
+**** path are expanded during the /fusion/
+When specifying local include files in the ESPHome configuration:
+
+#+begin_src yaml
+esphome:
+  includes:
+    - sensor_update.h
+    - sensor_update.cpp
+#+end_src
+
+The paths are expanded to their absolute equivalents relative to the project directory:
+
+#+begin_src yaml
+esphome:
+  includes:
+    - /config/esphome/sensor_update.h      #on home assistant
+    - /config/esphome/sensor_update.cpp
+#+end_src
+
+Since ~/config/esphome~ is where you have all the esphome YAMLs on home assistant setup.
+
+
+** [[https://esphome.io/components/external_components/][External Components]]
+Another way to include c++ files here is using the external components. Using either ~local~ or ~git~ variants.
+
+#+begin_src yaml
+# For remote build (home assistant environment)
+external_components:
+  - source:
+      type: git
+      url: https://github.com/xeechou/esphome-magnetometer-water-gas-meter
+      ref: quadrature-meter
+      path: components
+    components: [sensor_update]
+
+sensor_update:
+
+# For local build (esphome compile) DOES NOT WORK on hass directly either.
+external_components:
+  - source:
+      type: local
+      path: components
+    components: [sensor_update]
+
+sensor_update:  
+#+end_src
+
+The trick is that platformio automatically compiles all C++ files of your components along with your components. The setup here is an dummy sensor_update_component which has nothing in it.
+
+#+begin_src 
+components/
+  sensor_update/
+     __init__.py              
+     sensor_update.cpp        
+     sensor_update.h          
+     sensor_update_component.h  #empty component
+#+end_src
+
+In your generated platformio project you will have
+
+#+begin_src 
+ .                                                      drwxr-xr-x 3
+ ..                                                     drwxr-xr-x 6
+ CMakeLists.txt                                         -rw-r--r-- 1
+ esphome                                                drwxr-xr-x 4
+ esphome.h                                              -rw-r--r-- 1
+ idf_component.yml                                      -rw-r--r-- 1
+ main.cpp                                               -rw-r--r-- 1
+ esphome/components/sensor_update/sensor_update.cpp     -rw-r--r-- 1
+ esphome/components/sensor_update/sensor_update.h       -rw-r--r-- 1
+ esphome/components/sensor_update/sensor_update_comp.h  -rw-r--r-- 1
+#+end_src
+
+The ~#include "sensor_update.h"~ now inside ~esphome.h~ instead.
+
+*** captchas
+The ~local~ external components approach has the same limitation as the [[https://esphome.io/components/esphome/#includes][ESPHome/Core/includes]] approach. The ~path: components~ will get expanded to full path as well. So during deployment you will need to use ~git~ variant.
+
+
+* Quadrature encoder
+
+* Thanks to:
+- [[https://github.com/tronikos/esphome-magnetometer-water-gas-meter][tronikos/esphome-magnetometer-water-gas-meter]] one QMC5883l based magnetometer implementation, where this project forked from.
+- [[https://github.com/dnschneid/espleak][dnschneid/espleak]] :
