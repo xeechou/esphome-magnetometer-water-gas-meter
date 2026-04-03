@@ -1,11 +1,3 @@
-external_components:
-  - source:
-      type: local
-      path: components
-    components: [sensor_update]
-
-sensor_update:
-
 esphome:
   on_boot:
     priority: 600  # after HARDWARE, before DATA
