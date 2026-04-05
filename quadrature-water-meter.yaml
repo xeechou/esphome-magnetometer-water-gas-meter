@@ -85,6 +85,14 @@ substitutions:
 
   reverse_flow: 'false'  # Flip this if your sensor order results in negative flow in normal
   sample_rate_safety_factor: '0.95'
+  
+  ### units and initial values
+  # For water one of: CCF, ft³, gal, L, m³
+  # For gas one of: CCF, ft³, m³
+  volume_unit: 'L'
+  volume_per_quarter_rotation_initial_value: '0.02026555'
+  volume_init_total: '3003383.50'
+
 
   # burstmon: performs pipe burst detection by monitoring sensors for abnormal behavior
   # Burst pipes pose an issue for detection, as the flow rates quickly get unreasonably large for our sample rates
@@ -125,10 +133,105 @@ i2c:
     scan: False
 
 #####################################################################################
-## sensors
+## numbers and globals
+#####################################################################################
+number:
+  - platform: template
+    id: volume_per_quarter_rotation
+    name: volume per quarter rotation
+    entity_category: config
+    mode: box
+    min_value: 0
+    max_value: 9999999
+    step: 0.000000001
+    initial_value: ${volume_per_quarter_rotation_initial_value}
+    internal: true
+    update_interval: never
+    restore_value: true
+    optimistic: true
+    unit_of_measurement: ${volume_unit}
+    icon: mdi:rotate-360
+    on_value:
+      then:
+        - component.update: volume_per_quarter_rotation_sensor
+
+globals:
+  - id: errors
+    type: long
+    restore_value: no
+    initial_value: '0'
+  - id: samples
+    type: int[2]
+    restore_value: no
+    initial_value: '{0,0}'
+  - id: quarter_rotations_total
+    type: long
+    restore_value: yes
+    initial_value: '0'
+  - id: quarter_rotations_flow
+    type: long
+    restore_value: no
+    initial_value: '0'
+  - id: qcal
+    type: float[5]
+    restore_value: yes
+    initial_value: '{0,0,0,0,0}'
+  - id: led_level
+    type: float
+    restore_value: no
+    initial_value: '1'
+  - id: disarm_s
+    type: float
+    restore_value: no
+    initial_value: '0'
+
+#####################################################################################
+## template sensors
+#####################################################################################
+sensor:
+  - platform: template
+    id: sensor_sample_rate
+    name: Sample rate
+    entity_category: diagnostic
+    accuracy_decimals: 0
+    device_class: frequency
+    state_class: measurement
+    unit_of_measurement: Hz
+    filters:
+      - or:
+        - throttle: 60s
+        - delta: 4
+
+  - platform: template
+    id: sensor_total
+    name: Volume Total ${volume_unit}
+    lambda: return id(quarter_rotations_total) * id(volume_per_quarter_rotation).state;
+    update_interval: 1s
+    accuracy_decimals: 2
+    device_class: water
+    icon: mdi:water
+    state_class: total
+    unit_of_measurement: ${volume_unit}
+    filters:
+      - or:
+        - throttle: 60s
+        - delta: 0.01
+
+  # read only sensor for displaying the rotation volume
+  - platform: template
+    id: volume_per_quarter_rotation_sensor
+    name: Precised Volume per quarter rotation
+    lambda: !lambda 'return id(volume_per_quarter_rotation).state;'
+    update_interval: 60s
+    accuracy_decimals: 7
+    unit_of_measurement: ${volume_unit}
+
+  # TODO: displaying the upper and lower threshold
+
+#####################################################################################
+## qmc5883l
 #####################################################################################
 
-sensor:
   - platform: qmc5883l
     id : qmc_a
     i2c_id: i2c_a
@@ -161,18 +264,11 @@ sensor:
         - delta: 5
         - throttle: 500ms
 
-  - platform: template
-    id: sensor_sample_rate
-    name: Sample rate
-    entity_category: diagnostic
-    accuracy_decimals: 0
-    device_class: frequency
-    state_class: measurement
-    unit_of_measurement: Hz
-    filters:
-      - or:
-        - throttle: 60s
-        - delta: 4
+
+
+#####################################################################################
+## binary/text sensors
+#####################################################################################
 
 binary_sensor:
   - platform: template
@@ -197,6 +293,21 @@ binary_sensor:
     device_class: problem
     entity_category: diagnostic
 
+text_sensor:
+  - platform: template
+    id: leak_trigger
+    name: Leak trigger
+    entity_category: diagnostic
+
+  - platform: template             # debugging purpose, delete later
+    id: hyst_sensor
+    name: hysteresis
+    entity_category: diagnostic    
+
+#####################################################################################
+## bottons
+#####################################################################################
+
 button:
   - platform: template
     id: reset_calibration
@@ -211,50 +322,7 @@ button:
             }
             ESP_LOGI("button", "Calibration reset - qcal cleared");
 
-text_sensor:
-  - platform: template
-    id: leak_trigger
-    name: Leak trigger
-    entity_category: diagnostic
 
-  - platform: template             # debugging purpose, delete later
-    id: hyst_sensor
-    name: hysteresis
-    entity_category: diagnostic    
-
-#####################################################################################
-## globals
-#####################################################################################
-
-globals:
-  - id: errors
-    type: long
-    restore_value: no
-    initial_value: '0'
-  - id: samples
-    type: int[2]
-    restore_value: no
-    initial_value: '{0,0}'
-  - id: quarter_rotations_total
-    type: long
-    restore_value: yes
-    initial_value: '0'
-  - id: quarter_rotations_flow
-    type: long
-    restore_value: no
-    initial_value: '0'
-  - id: qcal
-    type: float[5]
-    restore_value: yes
-    initial_value: '{0,0,0,0,0}'
-  - id: led_level
-    type: float
-    restore_value: no
-    initial_value: '1'
-  - id: disarm_s
-    type: float
-    restore_value: no
-    initial_value: '0'
 
 #####################################################################################
 ## sensor_update script
