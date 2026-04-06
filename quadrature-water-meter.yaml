@@ -160,14 +160,27 @@ globals:
     type: long
     restore_value: no
     initial_value: '0'
+  - id: led_level
+    type: float
+    restore_value: no
+    initial_value: '1'
+  - id: disarm_s
+    type: float
+    restore_value: no
+    initial_value: '0'
   - id: samples
     type: int[2]
     restore_value: no
     initial_value: '{0,0}'
+  ### restoring values
   - id: quarter_rotations_total
     type: long
     restore_value: yes
     initial_value: '0'
+  - id: volume_init
+    type: float
+    restore_value: yes
+    initial_value: ${volume_init_total}
   - id: quarter_rotations_flow
     type: long
     restore_value: no
@@ -177,14 +190,6 @@ globals:
     type: float[5]
     restore_value: yes
     initial_value: '{0,0,0,0,0}'
-  - id: led_level
-    type: float
-    restore_value: no
-    initial_value: '1'
-  - id: disarm_s
-    type: float
-    restore_value: no
-    initial_value: '0'
 
 #####################################################################################
 ## template sensors
