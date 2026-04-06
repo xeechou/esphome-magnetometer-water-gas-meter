@@ -4,10 +4,37 @@
 static const char *const TAG = "sensor_update";
 
 // ---------- persistent state (was `static` locals in the lambda) ----------
-
 // Quadrature decoder lookup table
-// See: https://cdn.sparkfun.com/datasheets/Robotics/How%20to%20use%20a%20quadrature%20encoder.pdf
-static const int qdec[16] = {0,-1,1,2,1,0,2,-1,-1,2,0,1,2,1,-1,0};
+// See:
+// https://cdn.sparkfun.com/datasheets/Robotics/How%20to%20use%20a%20quadrature%20encoder.pdf
+
+// clang-format off
+
+//values in the matrix:
+//  0 : still, not moving
+//  1 : moving to positive direction
+// -1 : moving to negative direction
+//  2 : should not exist, signaling an error !!!!!!!!!!!!
+//
+// what we care here is extracting an direction out of this, example code:
+//
+// static int old_val = 0;   //combined with both sensorA and sensorB
+// static int new_val = 0;
+// static int output  = 0;
+//
+// old_val = new_val;
+// new_val = bool(inputA()) * 2 + bool(intpuB());
+// int index = old_val * 4 + new_val;
+// output = qdec[index];
+
+static const int qdec[16] = {
+   0, -1,  1,  2,
+   1,  0,  2, -1,
+  -1,  2,  0,  1,
+   2,  1, -1,  0
+};
+//clang-format on
+
 
 static int q[2] = {0, 0};
 static int run[3] = {0, 0, 0};
@@ -27,6 +54,28 @@ void sensor_update_init(const SensorUpdateConfig &cfg,
   s_ent = ent;
   s_sample_rate_thresh =
       1000.0f / cfg.sensor_update_interval_ms * cfg.sample_rate_safety_factor;
+}
+
+static inline bool sensor_high(float value, int tare, float hysteresis)
+{
+  return value > (tare + hysteresis);
+}
+
+static inline bool sensor_low(float value, int tare, float hysteresis)
+{
+  return value < (tare - hysteresis);
+}
+
+static inline bool low_to_high(float value, int tare, float hystersis,
+                               int last_val)
+{
+  return sensor_high(value, tare, hystersis) && !last_val;
+}
+
+static inline bool high_to_low(float value, int tare, float hystersis,
+                               int last_val)
+{
+  return sensor_low(value, tare, hystersis) && last_val;
 }
 
 void sensor_update(int sensor, float value) {
@@ -72,16 +121,29 @@ void sensor_update(int sensor, float value) {
 
   // --- quadrature decoding ------------------------------------------------
   int tare = (smin + smax) / 2;
-  int mod = 0;
 
-  if (value > tare + hysteresis && !q[sensor]) {
+  // Correctness relies on the single-transition invariant: when sensor_update(s, v)
+  // is called, only sensor s has just crossed a threshold. The other sensor (1-s)
+  // has not transitioned, so q[1-s] is simultaneously its previous and current
+  // state — no separate qlast[] is needed.
+  //
+  // Limitation: if both sensors cross their threshold within the same 5ms update
+  // cycle, the second callback sees q[1-s] already updated by the first. The
+  // intermediate combined state is silently skipped and counted as a single step
+  // instead of two. At high flow rates this causes missed counts or direction
+  // errors at the aliasing boundary; burstmon is designed to detect this
+  // condition.
+  int qlast = q[sensor];
+  if (low_to_high(value, tare, hysteresis, q[sensor])) {
     q[sensor] = 1;
-    // NB: original precedence is (5 << 1) - sensor, not 5 << (1-sensor)
-    mod = qdec[q[1 - sensor] * ((5 << 1) - sensor) + (1 << sensor)];
-  } else if (value < tare - hysteresis && q[sensor]) {
+  } else if (high_to_low(value, tare, hysteresis, q[sensor])) {
     q[sensor] = 0;
-    mod = qdec[q[1 - sensor] * ((5 << 1) - sensor) + (4 << sensor)];
   }
+  //note that if nothing changes, (curr == last) we get qdec[4 * n + n] == 0
+  //all the time.
+  int curr = (q[sensor] << sensor)  + (q[1-sensor] << (1-sensor));
+  int prev = (qlast << sensor)      + (q[1-sensor] << (1-sensor));
+  int mod  = qdec[prev * 4 + curr];
 
   if (mod == 2) {
     (*s_ent.errors) += 1;
