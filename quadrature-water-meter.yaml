@@ -205,7 +205,7 @@ sensor:
 
   - platform: template
     id: sensor_total
-    name: Total Volume/${volume_unit}
+    name: Total Volume ⁄${volume_unit}
     lambda: return id(quarter_rotations_total) * id(volume_per_quarter_rotation).state;
     update_interval: 1s
     accuracy_decimals: 2
