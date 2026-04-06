@@ -93,6 +93,9 @@ substitutions:
   volume_per_quarter_rotation_initial_value: '0.02026555'
   volume_init_total: '3003383.50'
 
+  volume_unit_display: 'm³'
+  volume_unit_display_multiplier: '0.0001f'  #convert from volume_unit to volume_unit_display
+
 
   # burstmon: performs pipe burst detection by monitoring sensors for abnormal behavior
   # Burst pipes pose an issue for detection, as the flow rates quickly get unreasonably large for our sample rates
@@ -209,15 +212,15 @@ sensor:
         - delta: 4
 
   - platform: template
-    id: sensor_total
-    name: Total Volume ⁄${volume_unit}
-    lambda: return id(quarter_rotations_total) * id(volume_per_quarter_rotation).state;
+    id: volume_total
+    name: Total Volume ⁄${volume_unit_display}
+    lambda: return id(quarter_rotations_total) * id(volume_per_quarter_rotation).state * ${volume_unit_display_multiplier};
     update_interval: 1s
-    accuracy_decimals: 2
+    accuracy_decimals: 7
     device_class: water
     icon: mdi:water
     state_class: total
-    unit_of_measurement: ${volume_unit}
+    unit_of_measurement: ${volume_unit_display}
     filters:
       - or:
         - throttle: 60s
@@ -225,12 +228,13 @@ sensor:
 
   - platform: template
     id: total_rotations
-    name: Total Rotations
+    name: Total Rotations (inc_or_dec)
     lambda: !lambda 'return id(quarter_rotations_total) / 4;'
     entity_category: diagnostic
+    internal: false
     update_interval: 1s
     accuracy_decimals: 0
-    state_class: total_increasing
+    state_class: measurement     #because we may not be actually increasing.
     unit_of_measurement: rot
     icon: mdi:counter
     filters:
@@ -344,13 +348,44 @@ button:
             }
             id(sensor_failure).publish_state(false);
 
+#####################################################################################
+## API service
+#####################################################################################
+api:
+  actions:
+    - action: set_init_or_curr_total   #set curr_total or init_total, cannot be both
+      variables:
+        curr_total: float
+        init_total: float
+      then:
+        - number.set:   #set curr_total  or init_total
+            id: volume_per_quarter_rotation
+            value: !lambda |-
+              if (curr_total > 0.0f) {
+                  return ( (curr_total / ${volume_unit_display_multiplier}) - id(volume_init) ) / (float)id(quarter_rotations_total);
+              } else {
+                  return id(volume_per_quarter_rotation).state;
+              }
+        - globals.set:
+            id: quarter_rotations_total
+            value: !lambda |-
+              if (init_total > 0.0f) {   //reset rotations
+                 return (long int)0;
+              } else {
+                return (long int) id(quarter_rotations_total);
+              }
+        - globals.set:
+            id: volume_init
+            value: !lambda |-
+              if (init_total > 0.0f) {
+                 return init_total / ${volume_unit_display_multiplier};
+              } else {
+                return id(volume_init);
+              }
 
 #####################################################################################
-## sensor_update script
+## sensor update script
 #####################################################################################
-
-# for quadrature encoder, see:
-# https://cdn.sparkfun.com/datasheets/Robotics/How%20to%20use%20a%20quadrature%20encoder.pdf
 script:
   - id: sensor_update_script
     parameters:
