@@ -12,8 +12,8 @@ static const char *const TAG = "sensor_update";
 
 //values in the matrix:
 //  0 : still, not moving
-//  1 : moving to positive direction
-// -1 : moving to negative direction
+//  1 : moving to clockwise
+// -1 : moving to counter-clockwise
 //  2 : should not exist, signaling an error !!!!!!!!!!!!
 //
 // what we care here is extracting an direction out of this, example code:
@@ -23,15 +23,26 @@ static const char *const TAG = "sensor_update";
 // static int output  = 0;
 //
 // old_val = new_val;
-// new_val = bool(inputA()) * 2 + bool(intpuB());
+// new_val = bool(sensor0()) + (bool(sensor1()) << 1);
 // int index = old_val * 4 + new_val;
 // output = qdec[index];
 
+// NOTE: that because we use [s0 + s1 << 1], we get reversed pattern
+//  cw:  [00 -> 01 -> 11 -> 10] or [0 -> 1 -> 3 -> 2]
+// ccw:  [00 -> 10 -> 11 -> 01] or [0 -> 2 -> 3 -> 1]
+
+//| p/c |  0  ||  1  ||  2 ||  3 ||
+// ------------------------------
+// ----  0 ||  0    | cw |  ccw  |  x |
+//|   1 | ccw     0|   x |    cw
+//|   2 | cw      x |  0 |   ccw |
+//|   3 ||  x    ccw | cw      0 |
+
 static const int qdec[16] = {
-   0, -1,  1,  2,
-   1,  0,  2, -1,
-  -1,  2,  0,  1,
-   2,  1, -1,  0
+   0,  1, -1,  2,
+  -1,  0,  2,  1,
+   1,  2,  0, -1,
+   2, -1,  1,  0
 };
 //clang-format on
 
