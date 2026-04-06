@@ -353,35 +353,26 @@ button:
 #####################################################################################
 api:
   actions:
-    - action: set_init_or_curr_total   #set curr_total or init_total, cannot be both
+    - action: set_curr_total  # recalculate volume_per_quarter_rotation so current total matches curr_total
       variables:
         curr_total: float
-        init_total: float
       then:
-        - number.set:   #set curr_total  or init_total
+        - number.set:
             id: volume_per_quarter_rotation
             value: !lambda |-
-              if (curr_total > 0.0f) {
-                  return ( (curr_total / ${volume_unit_display_multiplier}) - id(volume_init) ) / (float)id(quarter_rotations_total);
-              } else {
-                  return id(volume_per_quarter_rotation).state;
-              }
+              return ( (curr_total / ${volume_unit_display_multiplier}) - id(volume_init) ) / (float)id(quarter_rotations_total);
+
+    - action: set_init_total  # reset rotation counter and set the baseline volume offset
+      variables:
+        init_total: float
+      then:
         - globals.set:
             id: quarter_rotations_total
-            value: !lambda |-
-              if (init_total > 0.0f) {   //reset rotations
-                 return (long int)0;
-              } else {
-                return (long int) id(quarter_rotations_total);
-              }
+            value: '0'
         - globals.set:
             id: volume_init
             value: !lambda |-
-              if (init_total > 0.0f) {
-                 return init_total / ${volume_unit_display_multiplier};
-              } else {
-                return id(volume_init);
-              }
+              return init_total / ${volume_unit_display_multiplier};
 
 #####################################################################################
 ## sensor update script
