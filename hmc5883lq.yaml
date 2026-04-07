@@ -1,0 +1,15 @@
+---
+logger:
+  logs:
+    hmc5883l: INFO
+
+sensor:
+  - id: !extend qmc_a
+    platform: hmc5883l
+    address: 0x1E
+    oversampling: 1x
+
+  - id: !extend qmc_b
+    platform: hmc5883l
+    address: 0x1E
+    oversampling: 1x

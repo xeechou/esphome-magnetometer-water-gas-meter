@@ -77,6 +77,8 @@ substitutions:
   i2c_b_sda: GPIO18
   i2c_b_drdy: GPIO3
   # frequencies
+  i2c_address: '0x0D'
+  
   i2c_bus_freq: '50kHz'
   sensor_update_interval_ms: '5'
   sensor_oversampling: '64x'
@@ -261,7 +263,7 @@ sensor:
   - platform: qmc5883l
     id : qmc_a
     i2c_id: i2c_a
-    address: 0x0D
+    address: ${i2c_address}
     update_interval: ${sensor_update_interval_ms}ms
     oversampling: ${sensor_oversampling}
     field_strength_z: 
@@ -277,7 +279,7 @@ sensor:
   - platform: qmc5883l
     id : qmc_b
     i2c_id: i2c_b
-    address: 0x0D
+    address: ${i2c_address}
     update_interval: ${sensor_update_interval_ms}ms
     oversampling: ${sensor_oversampling}
     field_strength_z: 
