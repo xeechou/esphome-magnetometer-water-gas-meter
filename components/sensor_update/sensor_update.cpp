@@ -49,7 +49,7 @@ static const int qdec[16] = {
 
 static int q[2] = {0, 0};
 static int run[3] = {0, 0, 0};
-static int hyst_sampling = 0;
+static int hyst_sampling[2] = {0, 0};
 static int calib_rots = 0;
 static int last_sample[2] = {0, 0};
 
@@ -92,14 +92,14 @@ static inline bool high_to_low(float value, int tare, float hystersis,
 void sensor_update(int sensor, float value) {
   float &smin = s_ent.qcal[2 * sensor];
   float &smax = s_ent.qcal[2 * sensor + 1];
-  float &hysteresis = s_ent.qcal[4];
+  float &hysteresis = s_ent.qcal[4 + sensor];
 
   s_ent.samples[sensor] += 1;
 
   // --- auto-calibration ---------------------------------------------------
   if (!smin && !smax) {
     smin = smax = value;
-    hyst_sampling = 2000;
+    hyst_sampling[sensor] = 2000;
     calib_rots = 1000;
   } else if (calib_rots) {
     smin = std::min(smin, value);
@@ -107,14 +107,14 @@ void sensor_update(int sensor, float value) {
   }
 
   // --- hysteresis learning phase ------------------------------------------
-  if (hyst_sampling) {
-    hyst_sampling--;
+  if (hyst_sampling[sensor]) {
+    hyst_sampling[sensor]--;
     if (smax - smin > hysteresis) {
       hysteresis = smax - smin;
-      hyst_sampling = 2000;
+      hyst_sampling[sensor] = 2000;
       if (hysteresis > 20) {
         hysteresis = 20;
-        hyst_sampling = 0;
+        hyst_sampling[sensor] = 0;
         PUBLISH_STATE(s_ent.sensor_failure, true);
         LOG_W(TAG, "hysteresis overly high (>%g); is water flowing?",
                  hysteresis);

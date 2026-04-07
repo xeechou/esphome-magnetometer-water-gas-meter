@@ -81,7 +81,8 @@ substitutions:
   
   i2c_bus_freq: '50kHz'
   sensor_update_interval_ms: '5'
-  sensor_oversampling: '64x'
+  qmc_oversampling: '64x'
+  hmc_oversampling: '8x'
   hide_qmc_readings: 'True'
 
   gpio_led: GPIO2
@@ -191,11 +192,11 @@ globals:
     type: long
     restore_value: no
     initial_value: '0'
-  #qcal value: [s0-min, s0-max, s1-min, s1-max, hysteresis]
+  #qcal value: [s0-min, s0-max, s1-min, s1-max, s0-hysteresis, s1-hysteresis]
   - id: qcal
-    type: float[5]
+    type: float[6]
     restore_value: yes
-    initial_value: '{0,0,0,0,0}'
+    initial_value: '{0,0,0,0,0,0}'
 
 #####################################################################################
 ## template sensors
@@ -266,12 +267,12 @@ sensor:
     i2c_id: i2c_a
     address: ${i2c_address}
     update_interval: ${sensor_update_interval_ms}ms
-    oversampling: ${sensor_oversampling}
+    oversampling: ${qmc_oversampling}
     field_strength_z: 
       id: z_a
       name: qmc_a magnet field strength
       entity_category: diagnostic
-      internal: ${hide_qmc_readings}      
+      internal: ${hide_qmc_readings}
       on_raw_value:
         then:
           - lambda: id(sensor_update_script).execute(0, x);
@@ -284,7 +285,7 @@ sensor:
     i2c_id: i2c_b
     address: ${i2c_address}
     update_interval: ${sensor_update_interval_ms}ms
-    oversampling: ${sensor_oversampling}
+    oversampling: ${qmc_oversampling}
     field_strength_z: 
       id: z_b
       name: qmc_b magnet field strength
@@ -350,7 +351,7 @@ button:
       then:
         - lambda: |-
             // Reset qcal values to trigger recalibration
-            for (int i = 0; i < 5; i++) {
+            for (int i = 0; i < 6; i++) {
               id(qcal)[i] = 0;
             }
             id(sensor_failure).publish_state(false);
