@@ -82,6 +82,7 @@ substitutions:
   i2c_bus_freq: '50kHz'
   sensor_update_interval_ms: '5'
   sensor_oversampling: '64x'
+  hide_qmc_readings: true
 
   gpio_led: GPIO2
 
@@ -266,6 +267,7 @@ sensor:
     address: ${i2c_address}
     update_interval: ${sensor_update_interval_ms}ms
     oversampling: ${sensor_oversampling}
+    internal: ${hide_qmc_readings}
     field_strength_z: 
       id: z_a
       entity_category: diagnostic
@@ -282,6 +284,7 @@ sensor:
     address: ${i2c_address}
     update_interval: ${sensor_update_interval_ms}ms
     oversampling: ${sensor_oversampling}
+    internal: ${hide_qmc_readings}
     field_strength_z: 
       id: z_b
       entity_category: diagnostic
