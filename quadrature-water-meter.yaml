@@ -233,18 +233,29 @@ sensor:
   - platform: template
     id: total_rotations
     name: Total Rotations (inc_or_dec)
-    lambda: !lambda 'return id(quarter_rotations_total) / 4;'
+    lambda: !lambda 'return id(quarter_rotations_total) / 4.0f;'
     entity_category: diagnostic
     internal: false
     update_interval: 1s
-    accuracy_decimals: 0
+    accuracy_decimals: 2
     state_class: measurement     #because we may not be actually increasing.
     unit_of_measurement: rot
     icon: mdi:counter
     filters:
-      - or:
-        - throttle: 60s
-        - delta: 0.25
+      - delta: 0.25
+
+  # TODO: remove later
+  # - platform: template
+  #   id: quadrature_sampling      # aka mod in c++ 
+  #   name: Quadrature sampling
+  #   entity_category: diagnostic
+  #   internal: false
+  #   accuracy_decimals: 0
+  #   state_class: measurement     #because we may not be actually increasing.
+  #   unit_of_measurement: rot
+  #   icon: mdi:counter
+  #   filters:
+  #     - delta: 1
 
   # read only sensor for displaying the rotation volume
   - platform: template
@@ -255,8 +266,6 @@ sensor:
     accuracy_decimals: 7
     unit_of_measurement: ${volume_unit}
 
-
-  # TODO: displaying the upper and lower threshold
 
 #####################################################################################
 ## qmc5883l
@@ -337,6 +346,30 @@ text_sensor:
     id: hyst_sensor
     name: hysteresis
     entity_category: diagnostic    
+
+  - platform: template
+    id: qcal_a
+    name: qcal qmc_a
+    entity_category: diagnostic
+    icon: mdi:magnet
+    update_interval: 10s
+    lambda: |-
+      char buf[64];
+      snprintf(buf, sizeof(buf), "min=%.2f max=%.2f hyst=%.2f",
+               id(qcal)[0], id(qcal)[1], id(qcal)[4]);
+      return std::string(buf);
+
+  - platform: template
+    id: qcal_b
+    name: qcal qmc_b
+    entity_category: diagnostic
+    icon: mdi:magnet
+    update_interval: 10s
+    lambda: |-
+      char buf[64];
+      snprintf(buf, sizeof(buf), "min=%.2f max=%.2f hyst=%.2f",
+               id(qcal)[2], id(qcal)[3], id(qcal)[5]);
+      return std::string(buf);
 
 #####################################################################################
 ## bottons
