@@ -36,20 +36,26 @@ esphome:
             .reverse_flow             = ${reverse_flow},
             .burstmon_any_thresh      = ${burstmon_any_thresh},
             .burstmon_same_thresh     = ${burstmon_same_thresh},
+            .tracker_decay_rate       = ${tracker_decay_rate},
+            .min_span_multiplier      = ${min_span_multiplier},
+            .max_span_multiplier      = ${max_span_multiplier},
           };
           SensorUpdateEntities ent {
             .errors                  = &id(errors),
             .samples                 = id(samples),
             .quarter_rotations_total = &id(quarter_rotations_total),
             .quarter_rotations_flow  = &id(quarter_rotations_flow),
-            .qcal                    = id(qcal),
+            .magnet_span             = id(magnet_span),
             .disarm_s                = &id(disarm_s),
             .sensor_sample_rate      = id(sensor_sample_rate),
             .leak_detected           = id(leak_detected),
             .leak_warning            = id(leak_warning),
             .sensor_failure          = id(sensor_failure),
             .leak_trigger            = id(leak_trigger),
-            .hyst_sensor             = id(hyst_sensor),
+            // debugging code
+            .rot_dir                 = id(rotating_directions),
+            //.qmca                    = id(qmca_stat),
+            //.qmcb                    = id(qmcb_stat),
           };
           sensor_update_init(cfg, ent);
 
@@ -84,6 +90,8 @@ substitutions:
   qmc_oversampling: '64x'
   hmc_oversampling: '8x'
   hide_qmc_readings: 'True'
+  hide_quadrature_dir: 'True'
+  hide_calibration_info: 'True'
 
   gpio_led: GPIO2
 
@@ -121,6 +129,12 @@ substitutions:
                             # setting at or beyond 2*burstmon_same_thresh effectively disables it
   burstmon_same_thresh: '2' # maximum allowed same-sensor inversions in a row (0 disables)
                             # setting to 1 may also trigger at flows beyond flow_max/2
+
+  # Adaptive tracker parameters
+  tracker_decay_rate: '0.0005'   # inward decay per 5ms sample ≈ 6 µT/min; increase for faster thermal tracking
+  min_span_multiplier: '0.8'     # tracker window floor (fraction of magnet_span); keeps slow leaks detectable
+  max_span_multiplier: '1.2'     # tracker window ceiling (fraction of magnet_span); limits spike damage
+  calibration_seconds: '5'       # how long to run water during calibration
 
 #####################################################################################
 ## i2c config
@@ -192,11 +206,24 @@ globals:
     type: long
     restore_value: no
     initial_value: '0'
-  #qcal value: [s0-min, s0-max, s1-min, s1-max, s0-hysteresis, s1-hysteresis]
-  - id: qcal
-    type: float[6]
+  # [sensor-0 signal span, sensor-1 signal span]
+  - id: magnet_span
+    type: float[2]
     restore_value: yes
-    initial_value: '{0,0,0,0,0,0}'
+    initial_value: '{0, 0}'
+  # Calibration scratch globals (written by calibrate button press, read by on_raw_value)
+  - id: calibrating
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: calib_min
+    type: float[2]
+    restore_value: no
+    initial_value: '{0, 0}'
+  - id: calib_max
+    type: float[2]
+    restore_value: no
+    initial_value: '{0, 0}'
 
 #####################################################################################
 ## template sensors
@@ -246,16 +273,31 @@ sensor:
 
   # TODO: remove later
   # - platform: template
-  #   id: quadrature_sampling      # aka mod in c++ 
-  #   name: Quadrature sampling
+  #   id: qmca_stat
+  #   name: QMC A stat                #1 or 0
   #   entity_category: diagnostic
   #   internal: false
   #   accuracy_decimals: 0
-  #   state_class: measurement     #because we may not be actually increasing.
-  #   unit_of_measurement: rot
+  #   state_class: measurement
   #   icon: mdi:counter
-  #   filters:
-  #     - delta: 1
+
+  # - platform: template
+  #   id: qmcb_stat
+  #   name: QMC B stat                #1 or 0
+  #   entity_category: diagnostic
+  #   internal: false
+  #   accuracy_decimals: 0
+  #   state_class: measurement
+  #   icon: mdi:counter
+
+  - platform: template
+    id: rotating_directions
+    name: "Rotating directions"
+    entity_category: diagnostic
+    unit_of_measurement: rot
+    icon: mdi:counter
+    internal: ${hide_quadrature_dir}
+    #NOTE: do not include filters
 
   # read only sensor for displaying the rotation volume
   - platform: template
@@ -284,7 +326,12 @@ sensor:
       internal: ${hide_qmc_readings}
       on_raw_value:
         then:
-          - lambda: id(sensor_update_script).execute(0, x);
+          - lambda: |-
+              if (id(calibrating)) {
+                id(calib_min)[0] = std::min(id(calib_min)[0], x);
+                id(calib_max)[0] = std::max(id(calib_max)[0], x);
+              }
+              id(sensor_update_script).execute(0, x);
       filters:
         - delta: 5
         - throttle: 500ms
@@ -302,7 +349,12 @@ sensor:
       entity_category: diagnostic
       on_raw_value:
         then:
-          - lambda: id(sensor_update_script).execute(1, x);
+          - lambda: |-
+              if (id(calibrating)) {
+                id(calib_min)[1] = std::min(id(calib_min)[1], x);
+                id(calib_max)[1] = std::max(id(calib_max)[1], x);
+              }
+              id(sensor_update_script).execute(1, x);
       filters:
         - delta: 5
         - throttle: 500ms
@@ -318,12 +370,6 @@ binary_sensor:
     id: leak_detected
     name: Leak detected
     device_class: problem
-    # on_press:                           #led output
-    #   then:
-    #     - output.turn_on: leak_out
-    # on_release:
-    #   then:
-    #     - output.turn_off: leak_out
 
   - platform: template
     id: leak_warning
@@ -352,11 +398,14 @@ text_sensor:
     name: qcal qmc_a
     entity_category: diagnostic
     icon: mdi:magnet
-    update_interval: 10s
+    update_interval: 1s
+    internal: ${hide_calibration_info}
     lambda: |-
-      char buf[64];
-      snprintf(buf, sizeof(buf), "min=%.2f max=%.2f hyst=%.2f",
-               id(qcal)[0], id(qcal)[1], id(qcal)[4]);
+      char buf[80];
+      snprintf(buf, sizeof(buf), "span=%.1f tmin=%.1f tmax=%.1f",
+               id(magnet_span)[0],
+               sensor_update_get_track_min(0),
+               sensor_update_get_track_max(0));
       return std::string(buf);
 
   - platform: template
@@ -364,11 +413,14 @@ text_sensor:
     name: qcal qmc_b
     entity_category: diagnostic
     icon: mdi:magnet
-    update_interval: 10s
+    update_interval: 1s
+    internal: ${hide_calibration_info}
     lambda: |-
-      char buf[64];
-      snprintf(buf, sizeof(buf), "min=%.2f max=%.2f hyst=%.2f",
-               id(qcal)[2], id(qcal)[3], id(qcal)[5]);
+      char buf[80];
+      snprintf(buf, sizeof(buf), "span=%.1f tmin=%.1f tmax=%.1f",
+               id(magnet_span)[1],
+               sensor_update_get_track_min(1),
+               sensor_update_get_track_max(1));
       return std::string(buf);
 
 #####################################################################################
@@ -377,17 +429,56 @@ text_sensor:
 
 button:
   - platform: template
+    id: calibrate
+    name: Calibrate sensors
+    entity_category: config
+    icon: mdi:tune
+    on_press:
+      then:
+        - lambda: |-
+            id(calib_min)[0] = std::numeric_limits<float>::max();
+            id(calib_max)[0] = std::numeric_limits<float>::lowest();
+            id(calib_min)[1] = std::numeric_limits<float>::max();
+            id(calib_max)[1] = std::numeric_limits<float>::lowest();
+            id(calibrating) = true;
+            id(hyst_sensor).publish_state("Calibrating — run water now...");
+            ESP_LOGI("calibration", "Calibration started, running for ${calibration_seconds}s");
+        - delay: ${calibration_seconds}s
+        - lambda: |-
+            id(calibrating) = false;
+            const float min_required = 10.0f;
+            bool ok = true;
+            for (int i = 0; i < 2; i++) {
+              float span = id(calib_max)[i] - id(calib_min)[i];
+              if (span < min_required) {
+                ESP_LOGW("calibration", "Sensor %d span %.1f too small (need %.0f) — is water flowing?", i, span, min_required);
+                ok = false;
+                continue;
+              }
+              id(magnet_span)[i] = span;
+              sensor_update_reset_trackers(i);
+              ESP_LOGI("calibration", "Sensor %d: min=%.1f max=%.1f span=%.1f", i, id(calib_min)[i], id(calib_max)[i], span);
+            }
+            if (ok) {
+              id(sensor_failure).publish_state(false);
+              id(hyst_sensor).publish_state("Calibration OK");
+            } else {
+              id(hyst_sensor).publish_state("Calibration FAILED: low signal");
+            }
+
+  - platform: template
     id: reset_calibration
     name: Reset Calibration
     entity_category: config
     on_press:
       then:
         - lambda: |-
-            // Reset qcal values to trigger recalibration
-            for (int i = 0; i < 6; i++) {
-              id(qcal)[i] = 0;
-            }
-            id(sensor_failure).publish_state(false);
+            id(magnet_span)[0] = 0;
+            id(magnet_span)[1] = 0;
+            sensor_update_reset_trackers(0);
+            sensor_update_reset_trackers(1);
+            id(sensor_failure).publish_state(true);
+            id(hyst_sensor).publish_state("Calibration reset — press Calibrate");
 
 #####################################################################################
 ## API service
