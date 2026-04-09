@@ -436,6 +436,10 @@ button:
     on_press:
       then:
         - lambda: |-
+            id(magnet_span)[0] = 0;
+            id(magnet_span)[1] = 0;
+            sensor_update_reset_trackers(0);
+            sensor_update_reset_trackers(1);
             id(calib_min)[0] = std::numeric_limits<float>::max();
             id(calib_max)[0] = std::numeric_limits<float>::lowest();
             id(calib_min)[1] = std::numeric_limits<float>::max();
@@ -465,20 +469,6 @@ button:
             } else {
               id(hyst_sensor).publish_state("Calibration FAILED: low signal");
             }
-
-  - platform: template
-    id: reset_calibration
-    name: Reset Calibration
-    entity_category: config
-    on_press:
-      then:
-        - lambda: |-
-            id(magnet_span)[0] = 0;
-            id(magnet_span)[1] = 0;
-            sensor_update_reset_trackers(0);
-            sensor_update_reset_trackers(1);
-            id(sensor_failure).publish_state(true);
-            id(hyst_sensor).publish_state("Calibration reset — press Calibrate");
 
 #####################################################################################
 ## API service
