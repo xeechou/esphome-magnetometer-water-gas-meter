@@ -191,7 +191,6 @@ void sensor_update(int sensor, float value) {
 	mod = -mod;
       }
       (*s_ent.quarter_rotations_total) += mod;
-      (*s_ent.quarter_rotations_flow) += mod;
     }
 
   // --- burstmon (sensor inversion test) ------------------------------------

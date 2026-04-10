@@ -36,9 +36,8 @@ struct SensorUpdateEntities {
   long  *errors;
   int   *samples;                   // int[2]
   long  *quarter_rotations_total;
-  long  *quarter_rotations_flow;
-  float *magnet_span;               // float[2], persistent calibrated span per sensor
-  float *disarm_s;
+  float* magnet_span; // float[2], persistent calibrated span per sensor
+  float* disarm_s;
 
   // sensors / binary sensors / text sensors
   esphome::sensor::Sensor*              sensor_sample_rate;

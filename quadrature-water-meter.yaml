@@ -44,7 +44,6 @@ esphome:
             .errors                  = &id(errors),
             .samples                 = id(samples),
             .quarter_rotations_total = &id(quarter_rotations_total),
-            .quarter_rotations_flow  = &id(quarter_rotations_flow),
             .magnet_span             = id(magnet_span),
             .disarm_s                = &id(disarm_s),
             .sensor_sample_rate      = id(sensor_sample_rate),
@@ -107,6 +106,9 @@ substitutions:
 
   volume_unit_display: 'm³'
   volume_unit_display_multiplier: '0.0001f'  #convert from volume_unit to volume_unit_display
+
+  flow_interval_s: '1'            # how often to compute flow rate (seconds)
+  flow_report_interval_s: '10'    # how often to report to HA (averaged); increase to smooth spikes
 
   ##### burst monitoring #############################################################
   #
@@ -209,10 +211,6 @@ globals:
     type: float
     restore_value: yes
     initial_value: ${volume_init_total}
-  - id: quarter_rotations_flow
-    type: long
-    restore_value: no
-    initial_value: '0'
   # [sensor-0 signal span, sensor-1 signal span]
   - id: magnet_span
     type: float[2]
@@ -302,6 +300,32 @@ sensor:
     update_interval: 60s
     accuracy_decimals: 7
     unit_of_measurement: ${volume_unit}
+
+  - platform: template
+    id: sensor_flow
+    name: Flow
+    update_interval: ${flow_interval_s}s
+    accuracy_decimals: 2
+    device_class: volume_flow_rate
+    icon: mdi:water
+    state_class: measurement
+    unit_of_measurement: ${volume_unit}/min
+    filters:
+      - throttle_average: ${flow_report_interval_s}s
+    lambda: |-
+      static long prev_total = id(quarter_rotations_total);
+      static int prev_samples[2] = {id(samples)[0], id(samples)[1]};
+      long delta = id(quarter_rotations_total) - prev_total;
+      prev_total = id(quarter_rotations_total);
+      int ds0 = id(samples)[0] - prev_samples[0];
+      int ds1 = id(samples)[1] - prev_samples[1];
+      prev_samples[0] = id(samples)[0];
+      prev_samples[1] = id(samples)[1];
+      float flow = delta * id(volume_per_quarter_rotation).state
+                   * 60.0f / ${flow_interval_s};
+      float rate = std::min(ds0, ds1) / (float)(${flow_interval_s});
+      id(sensor_sample_rate).publish_state(rate);
+      return rate > 0 ? flow : NAN;
 
 
 #####################################################################################
