@@ -16,16 +16,17 @@ class TextSensor;
 }  // namespace esphome
 
 /// Configuration constants passed from YAML substitutions.
-struct SensorUpdateConfig {
-  float sensor_update_interval_ms;
-  float sample_rate_safety_factor;
-  bool reverse_flow;
-  int burstmon_any_thresh;
-  int burstmon_same_thresh;
-  // Adaptive tracker parameters
-  float tracker_decay_rate;   // inward decay per sample (follows thermal drift)
-  float min_span_multiplier;  // tracker window floor as fraction of magnet_span
-  float max_span_multiplier;  // tracker window ceiling as fraction of magnet_span
+struct SensorUpdateConfig
+{
+    float sensor_update_interval_ms; // 5
+    float sample_rate_safety_factor; // 0.95
+    bool  reverse_flow;
+    int   burstmon_total_inversions;  // 3
+    int   burstmon_sensor_inversions; // 2
+    // Adaptive tracker parameters
+    float tracker_decay_rate;  // inward decay per sample (follows thermal drift)
+    float min_span_multiplier; // tracker window floor as fraction of magnet_span
+    float max_span_multiplier; // tracker window ceiling as fraction of magnet_span
 };
 
 /// Pointers to ESPHome entities that the algorithm needs to interact with.

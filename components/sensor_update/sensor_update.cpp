@@ -15,7 +15,7 @@ static const char *const TAG = "sensor_update";
 //  0 : still, not moving
 //  1 : moving to clockwise
 // -1 : moving to counter-clockwise
-//  2 : should not exist, signaling an error !!!!!!!!!!!!
+//  2 : both bits changing, should absolute not exist.
 
 // NOTE: that because we use [s0 + s1 << 1], we get reversed pattern
 //  cw:  [00 -> 01 -> 11 -> 10] or [0 -> 1 -> 3 -> 2]
@@ -23,10 +23,10 @@ static const char *const TAG = "sensor_update";
 
 //| p/c |  0  ||  1  ||  2 ||  3 ||
 // ------------------------------
-// ----  0 ||  0    | cw |  ccw  |  x |
-//|   1 | ccw     0|   x |    cw
-//|   2 | cw      x |  0 |   ccw |
-//|   3 ||  x    ccw | cw      0 |
+//|  0  |  0   |  cw |  ccw |   x |
+//|   1 | ccw  |  0  |   x  |  cw |
+//|   2 | cw   |   x |   0  | ccw |
+//|   3 |  x   | ccw | cw   |   0 |
 
 static const int qdec[16] = {
    0,  1, -1,  2,
@@ -36,11 +36,11 @@ static const int qdec[16] = {
 };
 //clang-format on
 
-static bool  q[2]          = {false, false};
-static int   run[3]         = {0, 0, 0};
-static int   last_sample[2] = {0, 0};
-static float track_min[2]   = {NAN, NAN};
-static float track_max[2]   = {NAN, NAN};
+static bool  q[2]                = {false, false};
+static int   sensor_inversion[3] = {0, 0, 0};
+static int   last_sample[2]      = {0, 0};
+static float track_min[2]        = {NAN, NAN};
+static float track_max[2]        = {NAN, NAN};
 
 // ---------- cached copies set once by sensor_update_init() ----------------
 
@@ -49,9 +49,11 @@ static SensorUpdateEntities s_ent;
 static float s_sample_rate_thresh = 0;
 
 void sensor_update_init(const SensorUpdateConfig &cfg,
-                        const SensorUpdateEntities &ent) {
+                        const SensorUpdateEntities &ent)
+{
   s_cfg = cfg;
   s_ent = ent;
+  //cfg.sensor_update_interval usually 5ms. 1000/5  = 200 steps
   s_sample_rate_thresh =
       1000.0f / cfg.sensor_update_interval_ms * cfg.sample_rate_safety_factor;
 }
@@ -84,6 +86,13 @@ static inline bool high_to_low(float value, float tare, float hysteresis,
                                bool last_val)
 {
   return sensor_low(value, tare, hysteresis) && last_val;
+}
+
+// each sample should be alive for at least 2 sensor_update() run because we
+// are not able to determine qlast[1-sensor].
+static inline bool update_too_fast(int sample_time, int last_sample_time)
+{
+  return (sample_time - last_sample_time) < 2 * (int)s_cfg.sensor_update_interval_ms;
 }
 
 void sensor_update(int sensor, float value) {
@@ -165,56 +174,60 @@ void sensor_update(int sensor, float value) {
   }
 
   //note that if nothing changes, (curr == last) we get qdec[4 * n + n] == 0
-  //all the time.
+  //all the time. NOT that we would never get 2 here since qlast[1-sensor] =
+  //q[sensor] all the time.
   int curr = (q[sensor] << sensor)  + (q[1-sensor] << (1-sensor));
   int prev = (qlast << sensor)      + (q[1-sensor] << (1-sensor));
   int mod  = qdec[prev * 4 + curr];
 #ifdef DEV_DEBUG
-  if (changed) {
+  if (mod != 0) {
     PUBLISH_STATE(s_ent.rot_dir, mod);
-    LOG_I(TAG, "sensor going %d", mod);
+    LOG_I(TAG, "sensor changing stat (%d, %d -> %d)", prev, curr, mod);
   }
 #endif
 
-  if (mod == 2) {
-    (*s_ent.errors) += 1;
-  } else if (mod) {
-    if (s_cfg.reverse_flow) {
-      mod = -mod;
+    if (mod) {
+      if (s_cfg.reverse_flow) {
+	mod = -mod;
+      }
+      (*s_ent.quarter_rotations_total) += mod;
+      (*s_ent.quarter_rotations_flow) += mod;
     }
-    (*s_ent.quarter_rotations_total) += mod;
-    (*s_ent.quarter_rotations_flow) += mod;
-  }
 
-  // --- burstmon (pipe-burst detection) ------------------------------------
-  bool armed = (*s_ent.disarm_s) <= 0;
+  // --- burstmon (sensor inversion test) ------------------------------------
+  // bool armed = (*s_ent.disarm_s) == 0;
   int sample_time = GET_MILLIS();
 
-  if (mod
-      && sample_time - last_sample[sensor] < 2 * (int)s_cfg.sensor_update_interval_ms
-      && GET_STATE(s_ent.sensor_sample_rate) > s_sample_rate_thresh
-      && armed) {
-    run[sensor]++;
-    run[2]++;
-    bool any_burst =
-        s_cfg.burstmon_any_thresh && run[2] > s_cfg.burstmon_any_thresh;
-    bool same_burst =
-        s_cfg.burstmon_same_thresh && run[sensor] > s_cfg.burstmon_same_thresh;
+  if ((mod != 0) && update_too_fast(sample_time, last_sample[sensor])
+      // TODO: we don't have sample rate now.
+      // && GET_STATE(s_ent.sensor_sample_rate) > s_sample_rate_thresh
+      // && armed
+      ) {
+	// LOG_I(TAG, "reverse flow detected");
+	sensor_inversion[sensor]++;
+	sensor_inversion[2]++;
+	bool any_burst =
+          s_cfg.burstmon_total_inversions &&
+	  sensor_inversion[2] > s_cfg.burstmon_total_inversions;
+	bool same_burst =
+          s_cfg.burstmon_sensor_inversions &&
+	  sensor_inversion[sensor] > s_cfg.burstmon_sensor_inversions;
 
-    if (any_burst || same_burst) {
-      PUBLISH_STATE(s_ent.leak_warning, true);
-      PUBLISH_STATE(s_ent.leak_detected, true);
-      if (any_burst && same_burst) {
-        PUBLISH_STATE(s_ent.leak_trigger, "burstmon: same + any");
-      } else if (any_burst) {
-        PUBLISH_STATE(s_ent.leak_trigger, "burstmon: any");
+	if (any_burst || same_burst) {
+	  PUBLISH_STATE(s_ent.leak_warning, true);
+	  PUBLISH_STATE(s_ent.leak_detected, true);
+	  
+	  if (any_burst && same_burst) {
+            PUBLISH_STATE(s_ent.leak_trigger, "burstmon: same + any");
+	  } else if (any_burst) {
+            PUBLISH_STATE(s_ent.leak_trigger, "burstmon: any");
+	  } else {
+            PUBLISH_STATE(s_ent.leak_trigger, "burstmon: same");
+	  }
+	}
       } else {
-        PUBLISH_STATE(s_ent.leak_trigger, "burstmon: same");
+	sensor_inversion[sensor] = 0;
+	sensor_inversion[2] = sensor_inversion[0] + sensor_inversion[1]; //force in sync
       }
-    }
-  } else {
-    run[sensor] = 0;
-    run[2] = 0;
-  }
   last_sample[sensor] = sample_time;
 }
