@@ -36,7 +36,7 @@ This option platformio copies your c++ header files into ~.esphome/build/app/src
 
 the ~main.cpp~ is orchestrated from the ~esphome compile /path/to/your-config.yaml~.  where you can see a ~#include "sensor_update.h"~ in ~main.cpp~.
 
-*** However there is captchas here:
+*** However there is gotchas here:
 
 I found this approach does not work on home assistant esphome  builder.
 
@@ -125,11 +125,92 @@ In your generated platformio project you will have
 
 The ~#include "sensor_update.h"~ now inside ~esphome.h~ instead.
 
-*** captchas
+*** gotchas
 The ~local~ external components approach has the same limitation as the [[https://esphome.io/components/esphome/#includes][ESPHome/Core/includes]] approach. The ~path: components~ will get expanded to full path as well. So during deployment you will need to use ~git~ variant.
 
 
 * Quadrature encoder
+The quadrature encoder works by placing 2 hall effect sensors offset by 90 degrees, so that sensor produces sin(t) and cos(t) wave. By comparing this state to last state, we can deduce the rotating direction.
+
+** State encoding
+Each sensor is thresholded to a boolean (high/low). The two booleans are combined into a 2-bit state using ~s0 + s1 << 1~, giving states 0–3:
+
+#+begin_src
+ cw:  0 → 1 → 3 → 2 → 0
+ccw:  0 → 2 → 3 → 1 → 0
+#+end_src
+
+This maps to the standard Gray-code quadrature sequence from the [[https://cdn.sparkfun.com/datasheets/Robotics/How%20to%20use%20a%20quadrature%20encoder.pdf][SparkFun quadrature encoder guide]].
+
+** Decoder lookup table
+Direction is determined by a 4×4 table indexed by ~qdec[prev * 4 + curr]~:
+
+#+begin_src cpp
+static const int qdec[16] = {
+   0,  1, -1,  2,
+  -1,  0,  2,  1,
+   1,  2,  0, -1,
+   2, -1,  1,  0
+};
+#+end_src
+
+- ~0~ : no transition
+- ~1~ : clockwise step
+- ~-1~ : counter-clockwise step
+- ~2~ : illegal transition (both sensors changed simultaneously)
+
+The value ~2~ is an error sentinel. *NOTE that* her it is *unreachable*: ~sensor_update()~ is called once per sensor reading, so only one sensor can cross a threshold per call — the other sensor's bit is unchanged. This means ~prev~ and ~curr~ always differ in exactly one bit, and all single-bit transitions map to ~0~, ~1~, or ~-1~.
+
+** Single-transition invariant and why ~qlast[]~ is not needed
+Because ~on_raw_value~ fires for exactly one sensor at a time, when ~sensor_update(s, v)~ is called:
+- sensor ~s~ may have just crossed a threshold (its bit in ~q~ may change)
+- sensor ~1-s~ has *not* transitioned; ~q[1-s]~ is simultaneously its previous and current state
+
+Therefore no separate ~qlast[]~ array is required. ~prev~ and ~curr~ are reconstructed directly from the single updated bit:
+
+#+begin_src cpp
+int curr = (q[sensor] << sensor) + (q[1-sensor] << (1-sensor));
+int prev = (qlast     << sensor) + (q[1-sensor] << (1-sensor));
+int mod  = qdec[prev * 4 + curr];
+#+end_src
+
+** Adaptive tracker (tmin / tmax)
+Rather than a one-time calibration, each sensor maintains a live ~[tmin, tmax]~ window that tracks the signal range adaptively (~sensor_update.cpp~ lines 92–137):
+
+1. *Initialisation*: on the first valid reading, the window is centered on ~value~ with half-width ~magnet_span / 2~.
+2. *Spike rejection*: readings more than one ~magnet_span~ outside the current window are silently dropped (guards against QMC read-during-conversion glitches).
+3. *Inward decay*: every sample, ~tmax~ and ~tmin~ creep inward by ~tracker_decay_rate~ to follow slow thermal drift.
+4. *Outward expansion*: when the signal exceeds the current bounds the window expands immediately, clamped to ~magnet_span * max_span_multiplier~.
+5. *Minimum span*: the window is prevented from collapsing below ~magnet_span * min_span_multiplier~ so the decoder does not lock up when flow stops.
+
+Tare and hysteresis are derived from the live window each sample:
+
+#+begin_src cpp
+float tare       = (tmax + tmin) / 2.0f;
+float hysteresis = (tmax - tmin) * 0.25f;  // 25% of window on each side
+#+end_src
+
+** Maximum trackable speed
+The decoder can track at most one quadrature step per sample interval. At the default ~sensor_update_interval_ms = 5~, the ceiling is:
+
+#+begin_src
+1 step / 5 ms = 200 steps/s = 50 full rotations/s
+#+end_src
+
+Exceeding this causes aliasing: the decoder sees skipped or reversed states, identical to what a burst pipe produces during its transient ramp-up. This is the basis for the burstmon detection described below.
+
+** Burstmon (pipe-burst detection)
+If consecutive transitions on the *same* sensor arrive faster than ~2 × sensor_update_interval_ms~, a physical rotation is occurring faster than the sensor can reliably decode. Burstmon counts these rapid transitions in ~run[sensor]~ (per-sensor) and ~run[2]~ (either sensor combined):
+
+#+begin_src cpp
+if (mod && sample_time - last_sample[sensor] < 2 * sensor_update_interval_ms
+        && sample_rate > sample_rate_thresh && armed) {
+    sensor_inversion[sensor]++;
+    sensor_inversion[2]++;
+    // trigger if either counter exceeds its threshold
+}
+#+end_src
+
 
 * Thanks to:
 - [[https://github.com/tronikos/esphome-magnetometer-water-gas-meter][tronikos/esphome-magnetometer-water-gas-meter]] one QMC5883l based magnetometer implementation, where this project forked from.
