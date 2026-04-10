@@ -212,6 +212,38 @@ if (mod && sample_time - last_sample[sensor] < 2 * sensor_update_interval_ms
 #+end_src
 
 
+* Flow monitoring TODO
+Based on [[https://github.com/dnschneid/espleak][espleak]]'s flowmon implementation. The flow rate sensor is now in place; the following features remain:
+
+** Flowmon (threshold/duration leak detection)
+The core missing feature. Configurable monitors with (flow threshold, allowed duration) pairs. When flow exceeds a threshold for longer than the allowed duration, a leak is detected. Includes:
+- Multiple monitors for layered protection (e.g. high flow for 5s, any flow for 3h)
+- Negative flow monitors for upstream leaks or aliasing from pipe bursts
+- Sample rate safety factor to prevent false positives from degraded I2C
+- Conservative timer resets (only when sample rate is healthy)
+- Proximity-based warnings for short-trigger monitors
+
+** Automatic sensor restart
+Restart sensors when sample rate drops to zero for multiple flow intervals.
+
+** Zero-flow sensor failure detection
+Flag sensor failure if zero flow persists for 24 hours ("did the sensors fall off?").
+
+** Leak warning auto-clear
+Timer-based clearing of leak warnings after the monitoring window expires, if no leak was actually detected.
+
+** LED diagnostics
+LED blink rate and brightness driven by leak state, flow level, and sample rate.
+
+** Burstmon completeness
+The existing burstmon has two checks commented out (=sensor_update.cpp=):
+- Sample rate threshold check (needs =sensor_sample_rate= to be published first -- now done by the flow sensor)
+- Armed/disarmed check (needs disarm countdown logic)
+
+** Disarm countdown
+Currently =disarm_s= is a simple toggle. Espleak implements a timed countdown that re-arms automatically after a duration expires.
+
+
 * Thanks to:
 - [[https://github.com/tronikos/esphome-magnetometer-water-gas-meter][tronikos/esphome-magnetometer-water-gas-meter]] one QMC5883l based magnetometer implementation, where this project forked from.
 - [[https://github.com/dnschneid/espleak][dnschneid/espleak]] :
