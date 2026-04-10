@@ -187,7 +187,20 @@ globals:
     type: int[2]
     restore_value: no
     initial_value: '{0,0}'
-  ### restoring values
+  # Calibration scratch globals (written by calibrate button press, read by on_raw_value)
+  - id: calibrating
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: calib_min
+    type: float[2]
+    restore_value: no
+    initial_value: '{0, 0}'
+  - id: calib_max
+    type: float[2]
+    restore_value: no
+    initial_value: '{0, 0}'
+### restoring values
   - id: quarter_rotations_total
     type: long
     restore_value: yes
@@ -205,19 +218,7 @@ globals:
     type: float[2]
     restore_value: yes
     initial_value: '{0, 0}'
-  # Calibration scratch globals (written by calibrate button press, read by on_raw_value)
-  - id: calibrating
-    type: bool
-    restore_value: no
-    initial_value: 'false'
-  - id: calib_min
-    type: float[2]
-    restore_value: no
-    initial_value: '{0, 0}'
-  - id: calib_max
-    type: float[2]
-    restore_value: no
-    initial_value: '{0, 0}'
+
 
 #####################################################################################
 ## template sensors
