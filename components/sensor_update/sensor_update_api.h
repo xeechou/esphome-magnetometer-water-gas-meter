@@ -15,6 +15,8 @@ uint32_t mock_millis();
 void     mock_log_w(const char* tag, const char* fmt, ...);
 void     mock_log_i(const char* tag, const char* fmt, ...);
 std::string mock_str_sprintf(const char* fmt, ...);
+void        mock_switch_on(void* entity);
+void        mock_switch_off(void* entity);
 
 #    define PUBLISH_STATE(entity, value) mock_publish_state(entity, value)
 #    define GET_STATE(entity) mock_get_state(entity)
@@ -22,12 +24,15 @@ std::string mock_str_sprintf(const char* fmt, ...);
 #    define LOG_W(tag, fmt, ...) mock_log_w(tag, fmt, ##__VA_ARGS__)
 #    define LOG_I(tag, fmt, ...) mock_log_i(tag, fmt, ##__VA_ARGS__)
 #    define STR_SPRINTF(fmt, ...) mock_str_sprintf(fmt, ##__VA_ARGS__)
+#    define SWITCH_ON(entity) mock_switch_on(entity)
+#    define SWITCH_OFF(entity) mock_switch_off(entity)
 
 #else // compiled with esphome compile
 
 #    include "esphome/components/binary_sensor/binary_sensor.h"
 #    include "esphome/components/sensor/sensor.h"
 #    include "esphome/components/text_sensor/text_sensor.h"
+#    include "esphome/components/switch/switch.h"
 #    include "esphome/core/hal.h"
 #    include "esphome/core/helpers.h"
 #    include "esphome/core/log.h"
@@ -38,4 +43,6 @@ std::string mock_str_sprintf(const char* fmt, ...);
 #    define LOG_W(tag, fmt, ...) ESP_LOGW(tag, fmt, ##__VA_ARGS__)
 #    define LOG_I(tag, fmt, ...) ESP_LOGI(tag, fmt, ##__VA_ARGS__)
 #    define STR_SPRINTF(fmt, ...) esphome::str_sprintf(fmt, ##__VA_ARGS__)
+#    define SWITCH_ON(entity) (entity)->turn_on()
+#    define SWITCH_OFF(entity) (entity)->turn_off()
 #endif

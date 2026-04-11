@@ -53,8 +53,8 @@ esphome:
             .leak_trigger            = id(leak_trigger),
             // debugging code
             .rot_dir                 = id(rotating_directions),
-            //.qmca                    = id(qmca_stat),
-            //.qmcb                    = id(qmcb_stat),
+            .debug_led_0             = id(debug_switch_0),
+            .debug_led_1             = id(debug_switch_1),
           };
           sensor_update_init(cfg, ent);
 
@@ -84,7 +84,7 @@ substitutions:
   # frequencies
   i2c_address: '0x0D'
   
-  i2c_bus_freq: '50kHz'
+  i2c_bus_freq: '150kHz'
   sensor_update_interval_ms: '5'
   qmc_oversampling: '64x'
   hmc_oversampling: '8x'
@@ -217,6 +217,19 @@ globals:
     restore_value: yes
     initial_value: '{0, 0}'
 
+#####################################################################################
+## debug switch
+#####################################################################################
+switch:
+  - platform: gpio
+    id: debug_switch_0
+    pin: ${i2c_a_drdy}
+    internal: true
+
+  - platform: gpio
+    id: debug_switch_1
+    pin: ${i2c_b_drdy}
+    internal: true
 
 #####################################################################################
 ## template sensors
@@ -263,25 +276,6 @@ sensor:
     icon: mdi:counter
     filters:
       - delta: 0.25
-
-  # TODO: remove later
-  # - platform: template
-  #   id: qmca_stat
-  #   name: QMC A stat                #1 or 0
-  #   entity_category: diagnostic
-  #   internal: false
-  #   accuracy_decimals: 0
-  #   state_class: measurement
-  #   icon: mdi:counter
-
-  # - platform: template
-  #   id: qmcb_stat
-  #   name: QMC B stat                #1 or 0
-  #   entity_category: diagnostic
-  #   internal: false
-  #   accuracy_decimals: 0
-  #   state_class: measurement
-  #   icon: mdi:counter
 
   - platform: template
     id: rotating_directions

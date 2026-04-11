@@ -13,6 +13,9 @@ class BinarySensor;
 namespace text_sensor {
 class TextSensor;
 }  // namespace text_sensor
+namespace switch_ {
+class Switch;
+}  // namespace switch_
 }  // namespace esphome
 
 /// Configuration constants passed from YAML substitutions.
@@ -46,8 +49,8 @@ struct SensorUpdateEntities {
   esphome::binary_sensor::BinarySensor* sensor_failure;
   esphome::text_sensor::TextSensor*     leak_trigger;
   esphome::sensor::Sensor*              rot_dir;
-  // esphome::sensor::Sensor*              qmca;
-  // esphome::sensor::Sensor*              qmcb;
+  esphome::switch_::Switch*             debug_led_0;
+  esphome::switch_::Switch*             debug_led_1;
 };
 
 /// One-time initialisation — call from esphome on_boot or the first lambda.

@@ -100,7 +100,7 @@ void sensor_update(int sensor, float value) {
   float &tmin        = track_min[sensor];
   float &tmax        = track_max[sensor];
 
-  // esphome::sensor::Sensor* qmc_stats[2]  = {s_ent.qmca, s_ent.qmcb};
+  esphome::switch_::Switch*  leds[2] = {s_ent.debug_led_0, s_ent.debug_led_1};
 
   // Not yet calibrated — wait for magnet_span to be set by calibration button
   if (magnet_span <= 0) return;
@@ -164,12 +164,18 @@ void sensor_update(int sensor, float value) {
     // PUBLISH_STATE(qmc_stats[sensor], true);
     // LOG_I(TAG, "sensor %d went from 0 to 1", sensor);
 #endif
+#ifdef LED_DEBUG
+    SWITCH_ON(leds[sensor]);
+#endif
   } else if (high_to_low(value, tare, hysteresis, q[sensor])) {
     q[sensor] = false;
 #ifdef DEV_DEBUG
     changed = true;
     // PUBLISH_STATE(qmc_stats[sensor], false);
     // LOG_I(TAG, "sensor %d went from 1 to 0", sensor);
+#endif
+#ifdef LED_DEBUG
+    SWITCH_OFF(leds[sensor]);
 #endif
   }
 
