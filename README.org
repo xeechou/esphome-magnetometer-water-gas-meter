@@ -132,6 +132,20 @@ The ~local~ external components approach has the same limitation as the [[https:
 * Quadrature encoder
 The quadrature encoder works by placing 2 hall effect sensors offset by 90 degrees, so that sensor produces sin(t) and cos(t) wave. By comparing this state to last state, we can deduce the rotating direction.
 
+** hysteresis side effects (lagging)
+
+The hysteresis sampling has an surprising effects. It has this *inertia* effects.
+
+For *perfect* sin cos wave, you would want to cut off at ~sin(theta) = 0 && cos(theta) = 0~, that is, when you move from ~theta=89~ to ~theta=91~ (and back and force) ~sin(theta)~ would change the sign immediately, but if we  introduce hysteresis, the *sign* changing only at ~[tare-hysteresis, tare+hysteresis]~ , the box wave would retain its previous state in between.
+
+*** This has no problem if we go only in one direction.
+
+both sensor 0 and 1 are lagging (2*hysteresis) time, this should simply introduce a shift.
+
+*** You will feel the lag if you suddenly rotate back
+Again, state only change when crossing the ~[tare-hysteresis, tare+hysteresis]~, if you rotate clockwise just to reach 0 at ~tare-hysteresis~, then if you rotate counter-clockwise, you would see the 1 when rotate back ~2*hysteresis~.
+
+
 ** State encoding
 Each sensor is thresholded to a boolean (high/low). The two booleans are combined into a 2-bit state using ~s0 + s1 << 1~, giving states 0–3:
 
