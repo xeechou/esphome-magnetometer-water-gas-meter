@@ -251,7 +251,9 @@ sensor:
   - platform: template
     id: volume_total
     name: Total Volume ⁄${volume_unit_display}
-    lambda: return id(quarter_rotations_total) * id(volume_per_quarter_rotation).state * ${volume_unit_display_multiplier};
+    lambda: |-
+      float total = id(volume_init) + id(quarter_rotations_total) * id(volume_per_quarter_rotation).state;
+      return total * ${volume_unit_display_multiplier};
     update_interval: 1s
     accuracy_decimals: 7
     device_class: water
@@ -403,11 +405,6 @@ text_sensor:
     name: Leak trigger
     entity_category: diagnostic
 
-  - platform: template             # debugging purpose, delete later
-    id: hyst_sensor
-    name: hysteresis
-    entity_category: diagnostic    
-
   - platform: template
     id: qcal_a
     name: qcal qmc_a
@@ -460,7 +457,6 @@ button:
             id(calib_min)[1] = std::numeric_limits<float>::max();
             id(calib_max)[1] = std::numeric_limits<float>::lowest();
             id(calibrating) = true;
-            id(hyst_sensor).publish_state("Calibrating — run water now...");
             ESP_LOGI("calibration", "Calibration started, running for ${calibration_seconds}s");
         - delay: ${calibration_seconds}s
         - lambda: |-
@@ -480,9 +476,9 @@ button:
             }
             if (ok) {
               id(sensor_failure).publish_state(false);
-              id(hyst_sensor).publish_state("Calibration OK");
+              ESP_LOGI("calibration", "Calibration OK");
             } else {
-              id(hyst_sensor).publish_state("Calibration FAILED: low signal");
+              ESP_LOGI("calibration", "Calibration FAILED");
             }
 
 #####################################################################################
