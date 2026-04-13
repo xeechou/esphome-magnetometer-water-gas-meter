@@ -330,6 +330,7 @@ sensor:
     id : qmc_a
     i2c_id: i2c_a
     address: ${i2c_address}
+    # drdy_pin: ${i2c_a_drdy}
     update_interval: ${sensor_update_interval_ms}ms
     oversampling: ${qmc_oversampling}
     field_strength_z: 
@@ -353,6 +354,7 @@ sensor:
     id : qmc_b
     i2c_id: i2c_b
     address: ${i2c_address}
+    # drdy_pin: ${i2c_b_drdy}
     update_interval: ${sensor_update_interval_ms}ms
     oversampling: ${qmc_oversampling}
     field_strength_z: 

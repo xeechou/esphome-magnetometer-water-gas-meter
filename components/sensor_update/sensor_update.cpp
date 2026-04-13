@@ -2,7 +2,10 @@
 #include "sensor_update_api.h"
 #include <cmath>
 
-static const char *const TAG = "sensor_update";
+// #define DEV_DEBUG
+// #define LED_DEBUG
+
+static const char* const TAG = "sensor_update";
 
 // ---------- persistent state (was `static` locals in the lambda) ----------
 // Quadrature decoder lookup table
@@ -146,7 +149,7 @@ void sensor_update(int sensor, float value) {
   s_ent.samples[sensor] += 1;
   // Tare and hysteresis derived from live tracker (hysteresis = 25% of window)
   float tare       = (tmax + tmin) / 2.0f;
-  float hysteresis = (tmax - tmin) * 0.25f;
+  float hysteresis = (tmax - tmin) * 0.2f;
 
   // --- quadrature decoding ---------------------------------------------------
   // Correctness relies on the single-transition invariant: when sensor_update(s, v)
@@ -178,9 +181,11 @@ void sensor_update(int sensor, float value) {
     SWITCH_OFF(leds[sensor]);
 #endif
   }
-
-  //note that if nothing changes, (curr == last) we get qdec[4 * n + n] == 0
-  //all the time. NOT that we would never get 2 here since qlast[1-sensor] =
+  int sample_time = GET_MILLIS();
+  // NOTE that if nothing changes, (curr == last) we get qdec[4 * n + n] == 0
+  // all the time.
+  //
+  // also NOTE that we would never get 2 here since qlast[1-sensor] =
   //q[sensor] all the time.
   int curr = (q[sensor] << sensor)  + (q[1-sensor] << (1-sensor));
   int prev = (qlast << sensor)      + (q[1-sensor] << (1-sensor));
@@ -188,7 +193,8 @@ void sensor_update(int sensor, float value) {
 #ifdef DEV_DEBUG
   if (mod != 0) {
     PUBLISH_STATE(s_ent.rot_dir, mod);
-    LOG_I(TAG, "sensor changing stat (%d, %d -> %d)", prev, curr, mod);
+    // LOG_I(TAG, "sensor %d at %d, (%.2f, %.2f, %.2f) => (%d, %d -> %d)",
+    // 	  sensor, sample_time, value, tmin, tmax, prev, curr, mod);
   }
 #endif
 
@@ -201,7 +207,7 @@ void sensor_update(int sensor, float value) {
 
   // --- burstmon (sensor inversion test) ------------------------------------
   // bool armed = (*s_ent.disarm_s) == 0;
-  int sample_time = GET_MILLIS();
+
 
   if ((mod != 0) && update_too_fast(sample_time, last_sample[sensor])
       // TODO: we don't have sample rate now.
